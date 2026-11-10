@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: malinois-db
+    restart: always
+    environment:
+      POSTGRES_USER: malinois_user
+      POSTGRES_PASSWORD: malinois_password
+      POSTGRES_DB: malinois_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/local/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+
+
+
+
+volumes:
+  postgres_data:
