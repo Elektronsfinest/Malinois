@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiError, fetchMeRequest, loginRequest, type User } from "../api/auth";
 import { AuthContext } from "./useAuth";
 
-const TOKEN_STORAGE_KEY = "auth_token";
+const TOKEN_STORAGE_KEY = "access_token";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));

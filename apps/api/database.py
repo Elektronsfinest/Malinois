@@ -1,14 +1,18 @@
 from collections.abc import Generator
 import os
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://malinois_user:malinois_password@localhost:5432/malinois_db",
-)
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'dev.db'}")
 
-engine = create_engine(DATABASE_URL)
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args=connect_args,
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
