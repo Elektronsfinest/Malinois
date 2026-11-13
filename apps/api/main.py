@@ -28,5 +28,10 @@ app.include_router(auth_router)
 
 
 @app.get("/")
-def root() -> dict[str, str]:
-    return {"message": "API działa"}
+async def root():
+    return {"message": "Hello World"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
