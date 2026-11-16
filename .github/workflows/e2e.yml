@@ -27,6 +27,8 @@ jobs:
         run: |
           uv python install
           uv sync --locked --dev
+          uv run alembic upgrade head
+          uv run python seed.py
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
