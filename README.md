@@ -1,42 +1,101 @@
-# Malinois — Trainee TDD Starter & Testing Guide
+# Malinois
 
-Welcome to the **Malinois** project! This repository is pre-configured with **GitHub Actions CI**, **Backend Tests (`pytest`)**, **Frontend Unit/Component Tests (`Vitest` + `React Testing Library`)**, and **End-to-End Tests (`Playwright`)**.
-
-All assignment requirements are already encoded as automated tests (the **Red** phase of Test-Driven Development). Your goal is to write the implementation code to make every test turn **Green**.
-
----
-
-## 1. What is TDD (Test-Driven Development)?
-
-**Test-Driven Development (TDD)** is a software development practice where tests are written **before** the production code. Instead of writing features first and testing later, you let the tests drive your design and implementation through a short, repeatable loop known as **Red → Green → Refactor**:
-
-1. 🔴 **Red** — Run the test suite and watch the tests fail. Read the failure output carefully to understand what behavior or contract is missing.
-2. 🟢 **Green** — Write the minimal amount of production code required to make the failing test pass.
-3. 🔵 **Refactor** — Clean up your code (split components, improve naming, remove duplication, organize endpoints/modules) while keeping all tests green.
-
-### How to Follow TDD in This Project
-1. Run a single test file (or watch mode) to see what is currently failing.
-2. Implement one requirement at a time (start with **Task 1 Backend**, then **Task 1 Frontend**, then **E2E**, and finally **Task 2 Database & Migrations**).
-3. Re-run the tests after every small change.
-4. Once all tests pass, refactor your code and open/update your Pull Request so GitHub Actions verifies everything in CI.
-
-### Useful TDD & Tooling Links
-- [Martin Fowler — Test-Driven Development](https://martinfowler.com/bliki/TestDrivenDevelopment.html)
-- [Agile Alliance — What is TDD?](https://www.agilealliance.org/glossary/tdd/)
-- [FastAPI Testing Documentation](https://fastapi.tiangolo.com/tutorial/testing/)
-- [Pytest Documentation](https://docs.pytest.org/)
-- [SQLAlchemy 2.0 ORM Quickstart](https://docs.sqlalchemy.org/en/20/orm/quickstart.html)
-- [Alembic Tutorial](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
-- [Vitest Guide](https://vitest.dev/guide/)
-- [React Testing Library Introduction](https://testing-library.com/docs/react-testing-library/intro/)
-- [Playwright Documentation](https://playwright.dev/docs/intro)
+A full-stack web application for managing ZUS (Social Insurance) case deadlines.
+Cases are imported from Excel, deadline alerts are shown to the right people at
+the right time, and a strict role system ensures users only see and edit what
+they are permitted to.
 
 ---
 
-## 2. How to Run the Project & Tests Locally
+## Purpose
 
-### Backend (`apps/api`)
-Requires Python 3.14+ and [`uv`](https://docs.astral.sh/uv/).
+The system monitors deadlines for ZUS cases handled on behalf of clients.
+It replaces manual Excel tracking with a centralised, multi-user web app that:
+
+- Imports case data (dates, clients, assignments) from Excel files
+- Compares deadlines against the current date and fires popup notifications
+- Enforces three access tiers: regular users, supervisors, and administrators
+- Archives closed cases without losing historical records
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Backend** | Python 3.14+, FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2 |
+| **Auth** | JWT (PyJWT, HS256, 60 min expiry), bcrypt password hashing |
+| **Database** | PostgreSQL (production) · SQLite (local dev) |
+| **Frontend** | React 19, TypeScript, Vite, TanStack Router |
+| **Testing** | pytest, Vitest, Playwright (E2E) |
+| **CI** | GitHub Actions |
+| **Container** | Docker Compose (Postgres) |
+
+---
+
+## Role System
+
+| Role | Polish | Sees | Can Edit |
+|---|---|---|---|
+| `user` | Podrzędny | Own cases only | Own cases (no dates) |
+| `supervisor` | Nadrzędny | Own + direct subordinates' cases | Subordinates' cases (no dates) |
+| `admin` | Administrator | All cases | All fields including dates |
+
+> Only admins can change a case's `deadline` or `date_filed`. Only admins
+> can create users, assign roles, and reset passwords.
+
+---
+
+## Architecture
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                           Browser                              │
+│                                                                │
+│  React 19 + TanStack Router  (http://localhost:5173)           │
+│                                                                │
+│  /login  →  Main (case list)  →  Editor  →  Archive           │
+│                        ↓                                       │
+│          Notifications popup  │  User Settings                 │
+│                        ↓                                       │
+│          Admin Editor (Excel import/export, user mgmt)         │
+│                                                                │
+│          AuthContext  (token, user, role)                      │
+│          src/api/  (all fetch calls centralised here)          │
+└──────────────────────────┬─────────────────────────────────────┘
+                           │  HTTPS · JSON · JWT Bearer
+┌──────────────────────────┼─────────────────────────────────────┐
+│  FastAPI  (http://localhost:8000)                               │
+│                                                                │
+│  routers/auth.py      POST /api/login   GET /api/me            │
+│  routers/cases.py     GET/POST/PATCH /api/cases                │
+│  routers/admin.py     /api/admin/*  (admin only)               │
+│  routers/notify.py    GET /api/notifications                   │
+│                                                                │
+│  security.py  (JWT, bcrypt)   schemas.py  (Pydantic)           │
+│  models.py    (SQLAlchemy ORM)                                 │
+│  Alembic migrations                                            │
+└──────────────────────────┬─────────────────────────────────────┘
+                           │
+             ┌─────────────▼────────────┐
+             │  SQLite  dev.db          │  ← local dev (no Docker)
+             │  PostgreSQL  :5432       │  ← Docker / production
+             └──────────────────────────┘
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.14+ with [uv](https://docs.astral.sh/uv/)
+- Node 22+ with npm
+- Docker (optional — only needed for PostgreSQL)
+
+---
+
+### Backend
 
 ```bash
 cd apps/api
@@ -44,99 +103,149 @@ cd apps/api
 # Install dependencies
 uv sync --dev
 
-# Run the FastAPI development server (http://localhost:8000)
-uv run fastapi dev main.py --port 8000
+# Apply migrations
+uv run alembic upgrade head
 
-# Run all backend tests
-uv run pytest
+# Seed the dev user (trainee@example.com / Secret123!)
+uv run python seed.py
 
-# Run only Task 1 authentication tests
-uv run pytest tests/test_auth.py
-
-# Run only Task 2 database & Alembic tests
-uv run pytest tests/test_database.py
+# Start the API server
+uv run fastapi dev main.py
 ```
 
-### Frontend (`apps/web`)
-Requires Node.js 22+ and `npm`.
+API available at **http://localhost:8000**  
+Swagger docs at **http://localhost:8000/docs**
+
+---
+
+### Frontend
 
 ```bash
 cd apps/web
 
 # Install dependencies
-npm install
+npm ci
 
-# Start the Vite dev server (http://localhost:5173)
+# Start the dev server
 npm run dev
-
-# Run frontend tests once
-npm test
-
-# Run frontend tests in interactive watch mode (recommended for TDD!)
-npm run test:watch
 ```
 
-### End-to-End Tests (`Playwright`)
-Playwright automatically boots both the FastAPI server (`:8000`) and Vite server (`:5173`) if they are not already running.
+App available at **http://localhost:5173**
+
+> The frontend expects the backend running on `:8000`.
+
+---
+
+### PostgreSQL (optional)
+
+```bash
+# Start Postgres via Docker
+docker compose up -d
+```
+
+Then prefix API commands with:
+```bash
+DATABASE_URL=postgresql+psycopg://malinois_user:malinois_password@localhost:5432/malinois_db
+```
+
+---
+
+## API Endpoints
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| `GET` | `/health` | — | Health check |
+| `POST` | `/api/login` | — | Login, returns JWT + user |
+| `GET` | `/api/me` | any | Current user info |
+| `PATCH` | `/api/me/password` | any | Change own password |
+| `GET` | `/api/cases` | any | Cases (filtered by role) |
+| `POST` | `/api/cases` | admin/supervisor | Create a case |
+| `PATCH` | `/api/cases/:id` | any* | Update case fields (*dates: admin only) |
+| `POST` | `/api/cases/:id/archive` | any* | Archive a case |
+| `POST` | `/api/cases/:id/restore` | supervisor/admin | Restore archived case |
+| `GET` | `/api/notifications` | any | Active deadline notifications |
+| `POST` | `/api/notifications/:id/dismiss` | any | Dismiss a notification |
+| `POST` | `/api/admin/import` | admin | Import cases from Excel |
+| `GET` | `/api/admin/export` | admin | Export all cases as Excel |
+| `GET` | `/api/admin/users` | admin | List all users |
+| `POST` | `/api/admin/users` | admin | Create a user |
+| `PATCH` | `/api/admin/users/:id` | admin | Update role / supervisor |
+| `POST` | `/api/admin/users/:id/reset-password` | admin | Reset user password |
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///dev.db` | SQLAlchemy connection string |
+| `JWT_SECRET_KEY` | `dev-secret-key-…` | JWT signing secret — **must change in production** |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed origins |
+| `ENV` | `development` | `development`/`test` enables auto-seeding |
+| `SEED_DEMO_USER` | _(unset)_ | Force `true` / `false` to override seeding |
+
+> ⚠️ `JWT_SECRET_KEY` with the default value is **rejected** when `ENV=production`.
+
+---
+
+## Running Tests
+
+### Backend (pytest)
+
+```bash
+cd apps/api
+uv run alembic upgrade head
+uv run python seed.py
+uv run pytest
+```
+
+### Frontend (Vitest)
 
 ```bash
 cd apps/web
+npm test
+```
 
-# Install the Chromium browser (first time only)
-npx playwright install chromium
+### E2E (Playwright)
 
-# Run E2E tests
+```bash
+# Backend must be running on :8000
+cd apps/web
 npm run test:e2e
 ```
 
 ---
 
-## 3. How to Make the Tests Pass with Your Code
+## CI
 
-To integrate smoothly with the existing test suites, make sure your implementation follows these contracts:
+| Workflow | Triggers on | Steps |
+|---|---|---|
+| `ci-api.yml` | `apps/api/**` | install → migrate → seed → pytest |
+| `ci-web.yml` | `apps/web/**`, `packages/**` | install → lint → vitest → build |
+| `e2e.yml` | all branches | install → migrate → seed → playwright |
 
-### A. Backend — Task 1 (`apps/api/main.py`)
-Tests in `apps/api/tests/test_auth.py` import `app` from `main.py` and verify:
-- **Test User Credentials**:
-  - Email/Username: `trainee@example.com`
-  - Password: `Secret123!`
-- **`POST /api/login`**:
-  - Accepts JSON `{ "email": "...", "password": "..." }`.
-  - On valid credentials: returns `200 OK` with a JSON object containing a non-empty token (`"access_token"` or `"token"`) and user details (`"email": "trainee@example.com"`, either at top level or nested under `"user"`).
-  - On invalid password or unknown user: returns `401 Unauthorized` with a JSON error message (`"detail"` or `"message"`).
-- **`GET /api/me`**:
-  - Protected endpoint requiring `Authorization: Bearer <token>`.
-  - Returns `200 OK` with `{ "email": "trainee@example.com", ... }` when the token is valid.
-  - Returns `401` (or `403` when missing header) if the token is missing or invalid.
-- **CORS**:
-  - Configure FastAPI's `CORSMiddleware` to allow requests from `http://localhost:5173` (with `allow_methods=["*"]`, `allow_headers=["*"]`).
+---
 
-### B. Frontend — Task 1 (`apps/web/src/`)
-Tests in `apps/web/src/App.test.tsx` and `apps/web/e2e/app.spec.ts` render `<App />` and verify:
-- **Protected Route (`/`)**:
-  - Unauthenticated users visiting `/` are redirected to `/login`.
-- **Login Page (`/login`)**:
-  - Contains inputs associated with labels matching `/email/i` and `/hasło|password/i` (use `<label htmlFor="...">` or `aria-label`).
-  - Contains a submit button matching `/zaloguj/i`.
-  - Validates empty fields and invalid email formats on the client side before calling `fetch`.
-  - Displays `"Niepoprawny login lub hasło"` when `/api/login` responds with `401`.
-  - Stores the received token in `localStorage` or `sessionStorage` under key `token` or `access_token`.
-- **Dashboard (`/`)**:
-  - Displays `"Witaj, trainee@example.com!"`.
-  - Contains a logout button matching `/wyloguj/i` that clears the stored token and redirects back to `/login`.
+## Feature Specs
 
-### C. Database & Migrations — Task 2 (`apps/api/`)
-Tests in `apps/api/tests/test_database.py` inspect your SQLAlchemy and Alembic setup:
-- **`apps/api/models.py`**:
-  - Define `User` mapped to `__tablename__ = "users"` with columns:
-    - `id` (Primary Key)
-    - `email` (`String`, `unique=True`, `index=True`)
-    - `hashed_password` (`String`)
-    - `is_active` (`Boolean`, `default=True`)
-- **`apps/api/database.py`**:
-  - Expose `SessionLocal` and a generator dependency `get_db()` that uses `yield` and closes the session in a `finally:` block.
-- **Password Hashing & Seeding**:
-  - Hash `Secret123!` using `bcrypt` or `argon2` (never store plain text in `hashed_password`).
-  - Seed `trainee@example.com` automatically if the `users` table is empty.
-- **Alembic (`apps/api/alembic/`)**:
-  - Initialize Alembic in `apps/api/` (`alembic init alembic`), point `target_metadata = Base.metadata` in `alembic/env.py`, generate the initial migration in `alembic/versions/`, and apply it (`alembic upgrade head`).
+| # | Feature | Status |
+|---|---|---|
+| [001](specs/001-auth/spec.md) | User Authentication | ✅ Done |
+| [002](specs/002-roles-and-permissions/spec.md) | Role-Based Access Control | 📋 Spec ready |
+| [003](specs/003-case-management/spec.md) | Case Management | 📋 Spec ready |
+| [004](specs/004-excel-import/spec.md) | Excel Import & Export | 📋 Spec ready |
+| [005](specs/005-notifications/spec.md) | Deadline Notifications | 📋 Spec ready |
+| [006](specs/006-archive/spec.md) | Case Archive | 📋 Spec ready |
+| [007](specs/007-security/spec.md) | Security & Data Protection | 📋 Spec ready |
+| [008](specs/008-user-settings/spec.md) | User Settings | 📋 Spec ready |
+
+---
+
+## Demo Credentials
+
+| Field | Value |
+|---|---|
+| Email | `trainee@example.com` |
+| Password | `Secret123!` |
+
+> Seeded automatically in `development` and `test` environments.

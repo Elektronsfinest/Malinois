@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ApiError, fetchMeRequest, loginRequest, type User } from "../api/auth";
+import { ApiError, fetchMeRequest, loginRequest, type LoginResponse, type User } from "../api/auth";
 import { AuthContext } from "./useAuth";
 
 const TOKEN_STORAGE_KEY = "access_token";
@@ -44,13 +44,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [token, user]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await loginRequest(email, password);
+  const authenticate = useCallback(async (email: string, password: string) => {
+    return await loginRequest(email, password);
+  }, []);
+
+  const commitLogin = useCallback((result: LoginResponse) => {
     localStorage.setItem(TOKEN_STORAGE_KEY, result.access_token);
     setAuthError(null);
     setToken(result.access_token);
     setUser(result.user);
   }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const result = await loginRequest(email, password);
+    commitLogin(result);
+  }, [commitLogin]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -60,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, authError, login, logout }}>
+    <AuthContext.Provider value={{ token, user, isLoading, authError, login, authenticate, commitLogin, logout }}>
       {children}
     </AuthContext.Provider>
   );

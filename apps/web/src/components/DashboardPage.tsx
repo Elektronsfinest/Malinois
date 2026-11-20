@@ -1,20 +1,10 @@
-import { useEffect } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "../context/useAuth";
 
 export function DashboardPage() {
-  const { token, user, isLoading, authError, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user, isLoading, authError, logout } = useAuth();
 
-  useEffect(() => {
-    if (!isLoading && !token) {
-      void navigate({ to: "/login", replace: true });
-    }
-  }, [isLoading, token, navigate]);
-
-  async function handleLogout() {
+  function handleLogout() {
     logout();
-    await navigate({ to: "/login", replace: true });
   }
 
   if (isLoading) {
@@ -23,12 +13,16 @@ export function DashboardPage() {
 
   if (authError) {
     return (
-      <main>
-        <p role="alert">{authError}</p>
-        <button type="button" onClick={handleLogout}>
-          Wyloguj
-        </button>
-      </main>
+      <div className="dashboard-container">
+        <div className="glow-orb glow-orb-1" />
+        <div className="glow-orb glow-orb-2" />
+        <main className="dashboard-card">
+          <p role="alert">{authError}</p>
+          <button className="logout-btn" type="button" onClick={handleLogout}>
+            wyloguj
+          </button>
+        </main>
+      </div>
     );
   }
 
@@ -37,12 +31,19 @@ export function DashboardPage() {
   }
 
   return (
-    <main>
-      <h1>Dashboard</h1>
-      <p>Witaj, {user.email}!</p>
-      <button type="button" onClick={handleLogout}>
-        Wyloguj
-      </button>
-    </main>
+    <div className="dashboard-container">
+      <div className="glow-orb glow-orb-1" />
+      <div className="glow-orb glow-orb-2" />
+
+      <h1 className="brand-title">MALINOIS</h1>
+
+      <main className="dashboard-card">
+        <h1>Dashboard</h1>
+        <p className="dashboard-greeting">Witaj, {user.email}!</p>
+        <button className="logout-btn" type="button" onClick={handleLogout}>
+          wyloguj
+        </button>
+      </main>
+    </div>
   );
 }

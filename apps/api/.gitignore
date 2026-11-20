@@ -1,24 +1,41 @@
-__pycache__/
-*.py[codz]
-*$py.class
-
+# Virtual environment
 .venv/
 venv/
+
+# Environment files
 .env
 .env.*
 !.env.example
 
+# SQLite dev database
 *.db
 *.sqlite
 *.sqlite3
 
+# Python bytecode
+__pycache__/
+*.py[codz]
+*$py.class
+
+# Alembic compiled bytecode
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# Test & coverage
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+
+# Type checkers & linters
 .mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
 
+# Build / packaging
 dist/
 build/
 *.egg-info/
+
+# Logs
 *.log
