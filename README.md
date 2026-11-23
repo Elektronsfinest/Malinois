@@ -238,6 +238,12 @@ npm run test:e2e
 | [006](specs/006-archive/spec.md) | Case Archive | 📋 Spec ready |
 | [007](specs/007-security/spec.md) | Security & Data Protection | 📋 Spec ready |
 | [008](specs/008-user-settings/spec.md) | User Settings | 📋 Spec ready |
+| [009](specs/009-edit-history/spec.md) | Edit History / Audit Log | 📋 Spec ready |
+| [010](specs/010-case-notes/spec.md) | Case Notes | 📋 Spec ready |
+| [011](specs/011-concurrent-editing/spec.md) | Concurrent Editing | 📋 Spec ready |
+| [012](specs/012-admin-panel/spec.md) | Admin Panel & User Management | 📋 Spec ready |
+| [013](specs/013-search-and-filtering/spec.md) | Case Search & Filtering | 📋 Spec ready |
+| [014](specs/014-dashboard/spec.md) | Dashboard & Summary Stats | 📋 Spec ready |
 
 ---
 

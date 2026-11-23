@@ -351,6 +351,12 @@ The spec format reference (what every section means and common mistakes) is in:
 | [006](specs/006-archive/spec.md) | archive | Case Archive | 📋 Spec |
 | [007](specs/007-security/spec.md) | security | Security & Data Protection | 📋 Spec |
 | [008](specs/008-user-settings/spec.md) | user-settings | User Settings | 📋 Spec |
+| [009](specs/009-edit-history/spec.md) | edit-history | Edit History / Audit Log | 📋 Spec |
+| [010](specs/010-case-notes/spec.md) | case-notes | Case Notes | 📋 Spec |
+| [011](specs/011-concurrent-editing/spec.md) | concurrent-editing | Concurrent Editing | 📋 Spec |
+| [012](specs/012-admin-panel/spec.md) | admin-panel | Admin Panel & User Management | 📋 Spec |
+| [013](specs/013-search-and-filtering/spec.md) | search-and-filtering | Case Search & Filtering | 📋 Spec |
+| [014](specs/014-dashboard/spec.md) | dashboard | Dashboard & Summary Stats | 📋 Spec |
 
 ---
 
