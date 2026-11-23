@@ -34,9 +34,9 @@ app.add_middleware(
 app.include_router(auth_router)
 
 
-#@app.get("/")
-#async def root():
-#   return {"message": "Hello World"}
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}
 
 
 @app.get("/health")
