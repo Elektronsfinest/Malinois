@@ -1,12 +1,12 @@
-# Concurrent Editing
+# Concurrent Editing & Draft Protection
 
 ## Goal
 
-Allow multiple users to edit the same case simultaneously without silently
-overwriting each other's changes. The system must detect conflicts, present
-them clearly, and let the user decide how to resolve them. This is a hard
-requirement from the client: several people may work on the same case at the
-same time.
+Allow multiple users to work on the same case safely without silently
+overwriting each other's changes, and prevent silent loss of unsaved edits when
+a 60-minute JWT expires mid-edit. Every case mutation in the system routes
+through one service layer enforcing optimistic locking (`version`), and
+session-expiry drafts are preserved in `sessionStorage`.
 
 ## User Stories
 
@@ -15,42 +15,58 @@ same time.
   overwrite their work.
 - As a user, I want to see what the other person changed so that I can decide
   whether to keep my version, their version, or merge manually.
-- As a supervisor, I want case edits to be safe regardless of concurrency so
-  that I can trust the data integrity of the system.
+- As a supervisor or admin running bulk actions, archive/restore, reassignment,
+  or an Excel copy commit, I want stale versions to be detected per row so that
+  concurrent edits are never silently clobbered.
+- As a user whose 60-minute session expires while editing a form, I want my
+  unsaved changes preserved across re-login so that I never lose work silently.
 
 ## Acceptance Criteria
 
 ### Backend
-- [ ] The `cases` table has a `version` column (integer, default `1`)
-- [ ] Every successful `PATCH /api/cases/:id` request must include
-      `{ "version": <current_version> }` in the body
-- [ ] If the submitted `version` does not match the current `version` in the
-      database, the server returns `409 Conflict` with the latest case data
-      so the client can show the diff
-- [ ] On a successful save, `version` is incremented by 1 atomically
-- [ ] `GET /api/cases/:id` and `GET /api/cases` always return the current
-      `version` field on each case object
-- [ ] The version check is performed inside a database transaction to prevent
-      race conditions between two concurrent saves
+- [ ] The `cases` table has a `version` column (`Integer`, not null,
+      `server_default="1"`)
+- [ ] **Unified service-layer enforcement (zero bypasses):**
+  - Every single-case mutation (`PATCH /api/cases/:id`,
+    `POST /api/cases/:id/archive`, `POST /api/cases/:id/restore`) MUST require
+    `version` in the request body, verify `cases.version == submitted_version`
+    inside a DB transaction, atomically increment `version = version + 1`, and
+    return `409 Conflict` with the latest `current` case object on mismatch
+  - Bulk operations (`POST /api/cases/bulk`, spec 015), reassignment
+    (`POST /api/cases/reassign`, spec 016), and Excel copy commits
+    (`POST /api/import/copies/:id/commit`, spec 004) MUST supply per-row
+    `{ id, version }` from the UI selection or working copy, verify and
+    increment `version` on each row, and report per-row `409` conflicts without
+    silent overwrites
+- [ ] `GET /api/cases` and `GET /api/cases/:id` always return `version` on
+      every case object
 
 ### Frontend
-- [ ] When opening the case Editor, the client records the `version` it loaded
-- [ ] Every save request sends the recorded `version` alongside the changed
-      fields
-- [ ] On a `409` response, the editor shows a conflict modal with two columns:
-      "Twoja wersja" (your unsaved values) and "Zapisana wersja" (the values
-      that were saved by the other user)
-- [ ] The user can choose: "Nadpisz" (force-save your version, loading the new
-      `version` number first) or "Odrzuć moje zmiany" (reload from server)
-- [ ] After resolving, the editor updates to reflect the chosen outcome
+- [ ] When opening the inline Case Editor (spec 003), the client records the
+      loaded `version` and sends it on every save, archive, or restore request
+- [ ] On a `409 Conflict` response, an accessible conflict modal
+      (`role="alertdialog"`) shows two columns: **"Twoja wersja"** (unsaved
+      values) and **"Zapisana wersja"** (latest server values from `current`)
+- [ ] The user chooses:
+  - **"Nadpisz"** — re-submits their changes using `current.version` (all field
+    changes are still recorded normally in `case_edit_log`, spec 009)
+  - **"Odrzuć moje zmiany"** — reloads the editor from `current`
+- [ ] **Session-expiry draft protection (N-17):**
+  - On any `401 Unauthorized` while a form has unsaved edits, the frontend
+    persists the draft in `sessionStorage` keyed by the current user's email
+    and opens an inline **re-login modal**
+  - Upon successful re-authentication as the **same user**, the modal closes
+    and the unsaved draft is restored automatically
+  - Drafts are cleared immediately on explicit logout or if a **different
+    user** signs in
 - [ ] No silent data loss — the editor never discards unsaved changes without
       explicit user confirmation
 
 ## Out of Scope
 
-- Real-time collaborative editing (Google Docs style — live cursor sync)
-- WebSocket-based "someone is editing" presence indicators (future enhancement)
-- Three-way merge of overlapping text fields — the user resolves manually
+- Real-time collaborative cursor sync (Google Docs style)
+- WebSocket-based live presence indicators (future enhancement)
+- Automatic three-way text merging (resolved explicitly by the user)
 
 ## API Contract
 
@@ -76,34 +92,29 @@ same time.
 **409 Conflict** — version mismatch
 ```json
 {
-  "detail": "Conflict: case was modified by another user.",
+  "detail": "Konflikt wersji: sprawa została zmodyfikowana przez innego użytkownika.",
   "current": {
     "id": 1,
-    "version": 4,
+    "case_number": "CASE-2027-0001",
+    "title": "Sprawa emerytalna – Kowalski",
+    "client_name": "Jan Kowalski",
+    "assigned_to": 3,
+    "deadline": "2027-02-10",
+    "date_filed": "2026-11-01",
     "status": "open",
-    "note": "Zmiana przez Anna.",
+    "archived": false,
+    "version": 4,
     "updated_at": "2027-01-15T12:00:00Z"
   }
 }
 ```
 
-The `current` object contains the full latest case so the client can render
-the diff without an extra request.
-
 ## Data Model Changes
 
 Add to `cases` table:
-- `version` — `Integer`, not null, default `1`
+- `version` — `Integer`, not null, `server_default="1"` (also listed in spec 003)
 
-No new tables. The version column is updated atomically within the existing
-`PATCH` transaction.
+## Resolved Decisions (Indaba Council)
 
-## Open Questions
-
-- [ ] Should `version` be exposed to end users in the UI or kept internal?
-      → Internal — only shown in the conflict modal for debugging if helpful.
-- [ ] What happens if the same user has the case open in two browser tabs?
-      → Same conflict flow — the second save from tab 2 will get a `409`.
-- [ ] Is optimistic locking sufficient, or is a pessimistic lock (edit lock)
-      needed? → Optimistic locking (version field) is sufficient for the
-      expected concurrency level; pessimistic locks add UX complexity.
+- All case mutations (PATCH, archive, restore, bulk, reassign, Excel copy commit) enforce and increment `version` through one service layer with no silent overwrites (N-06).
+- On `401` during editing, unsaved drafts are saved to `sessionStorage` and restored via a re-login modal, clearing on explicit logout or user switch (N-17).

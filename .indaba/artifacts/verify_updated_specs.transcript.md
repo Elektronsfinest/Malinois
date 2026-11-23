@@ -1,0 +1,35 @@
+# Debate: verify_updated_specs
+
+Outcome: reached after 1 round(s).
+
+## Round 1: claude (AGREEMENT)
+
+```text
+VERIFIED: 0 contradictions found.
+
+This is a targeted grep spot-check of the seven contracts you listed. I did not read every spec line by line, and I did not check each of the 24 resolutions individually.
+
+- **N-14, `GET /api/cases` shape:** `{items, total, page, page_size}` appears in 002, 003, 006, 013, 009 and DEPENDENCY_MAP. AGENTS.md matches.
+- **N-05, 404 vs 403:** I did not fully trace this across all nine specs. AGENTS.md states the policy, and none of the greps for conflicting wording found anything.
+- **N-06, `version` locking:** I did not read through each of the seven specs. AGENTS.md lists every mutation type as requiring a version check with 409 on mismatch.
+- **N-15 and N-21, routes and tabs:** `/` is the Dashboard and `/cases` is Main. Admin has 4 tabs (Users, Settings, Audit Log, Backups). Import is reached from `/cases`, not from Admin. `due_this_week` survives only in a 014 line saying it was replaced by `due_soon`.
+- **N-18 and N-20, passwords and JWT:** The 12-character minimum appears in 002, 007, 008 and 012, and no 8-character remnants turned up. The JWT is `sub`-only in 002 and 007.
+- **N-10 and N-19, removed fields:** `cases.note` appears only in lines saying it was removed (003, 009, 010). `notifications_sound` is out of scope in 005 and 008.
+- **N-22 and N-23, links and backups:** The DEPENDENCY_MAP and AGENTS.md links to all 17 specs resolve to existing directories. The transcript link in DEPENDENCY_MAP is also valid. I did not check the cross-spec links inside the individual specs. Backup 012↔017 is consistent in the map. I did not read 004 or 009 for the pre-import snapshot.
+```
+
+## Round 1: agy (AGREEMENT)
+
+```text
+VERIFIED: 0 contradictions found.
+
+I read all 17 specs (`001`–`017`), `specs/DEPENDENCY_MAP.md`, `AGENTS.md`, and `.indaba/artifacts/resolve_n01_n24.transcript.md` in full and verified all 24 Indaba resolutions (N-01–N-24) and cross-spec contracts:
+
+- **`GET /api/cases` shape (N-14):** `{ items, total, page, page_size }` is consistent across `002`, `003`, `006`, `013`, `DEPENDENCY_MAP`, and `AGENTS.md`; supervisor team totals use the single `GET /api/dashboard/summary` (`014`).
+- **`404` vs `403` policy (N-05):** Non-existent/out-of-scope resources return `404` and role-gated endpoints or forbidden in-scope actions/fields return `403` across `002`, `003`, `005`, `006`, `007`, `009`, `010`, `015`, `016`.
+- **`version` optimistic locking (N-06):** Unified service layer enforces/increments `version` with `409 Conflict` across `002`, `003`, `004`, `006`, `011`, `015`, `016`.
+- **Routes & urgency (N-15, N-16, N-21):** `/`, `/cases`, `/import`, `/archive`, `/settings`, `/admin` align across `003`, `004`, `008`, `012`, `014`, `DEPENDENCY_MAP`, and `AGENTS.md`; `due_soon` and `overdue=true` (`Europe/Warsaw`) are consistent.
+- **Passwords & JWT (N-17, N-18, N-20):** Unified 12-char strong policy, `must_change_password` (`403` with `password_change_required`), `sub`-only 60-min JWT, and `401` `sessionStorage` draft recovery match across `002`, `007`, `008`, `011`, `012`.
+- **Removed fields (N-10, N-19):** `cases.note` removed in favor of `case_notes` (`003`, `004`, `009`, `010`, `011`); `notifications_sound` removed (`005`, `008`).
+- **Admin 4 tabs, backups, links (N-21–N-24):** 4 tabs (`Users`, `Settings`, `Audit Log`, `Backups`), mandatory `pre_import` snapshot, password-reverified audit-logged downloads, explicit deactivation reassignment (`409`), and all spec/transcript links are intact across `002`, `004`, `009`, `012`, `017`.
+```

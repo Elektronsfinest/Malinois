@@ -2,74 +2,94 @@
 
 ## Goal
 
-Give administrators a dedicated UI for managing users, assigning roles and
-supervisors, resetting passwords, and monitoring the overall health of the
-system. All admin operations are already secured at the API level (spec 002,
-spec 007); this spec covers the frontend panel and ties the admin API endpoints
-together into a coherent workflow.
+Give administrators a dedicated UI (`/admin`) for managing users, assigning
+roles and supervisors, resetting passwords, configuring system settings,
+inspecting the admin audit log, and managing database backups. All admin
+endpoints are secured with `require_role("admin")` (spec 002, spec 007).
+Excel import & full copy editing live separately at `/import` (reached from
+`/cases`, spec 004).
 
 ## User Stories
 
-- As an admin, I want to see a list of all users with their roles and
-  supervisors so that I have a full picture of the team structure.
-- As an admin, I want to create a new user account so that a new colleague can
-  start using the system without registering themselves.
-- As an admin, I want to change a user's role or supervisor assignment so that
-  the team hierarchy stays accurate.
-- As an admin, I want to deactivate a user account so that a former employee
-  loses access immediately.
-- As an admin, I want to reset a user's password and hand them a temporary one
-  so that locked-out users can regain access.
-- As an admin, I want to trigger an Excel import and monitor its progress so
-  that case data is kept up to date.
+- As an admin, I want to see a list of all users with their roles, supervisors,
+  and active status so that I have a full picture of the team structure.
+- As an admin, I want to create a new user account with a temporary password
+  that forces a password change on first login.
+- As an admin, I want to change a user's role or supervisor assignment and
+  safely deactivate accounts by explicitly reassigning their active cases and
+  subordinates.
+- As an admin, I want to reset a user's password and hand them a one-time
+  temporary password so that locked-out users can regain access.
+- As an admin, I want to configure `notification_threshold_days`, inspect the
+  security/permission audit log, and manage backups in one place.
 
 ## Acceptance Criteria
 
 ### Backend
-- [ ] All `/api/admin/*` endpoints return `403` for non-admin callers (already
-      required by spec 002; verified here with dedicated tests)
+- [ ] All `/api/admin/*` endpoints return `403 Forbidden` for non-admin callers
 - [ ] `GET /api/admin/users` supports optional query params:
-      `?role=user|supervisor|admin` and `?supervisor_id=<id>` for filtering
-- [ ] `POST /api/admin/users` enforces strong password policy on the initial
-      password (spec 007)
-- [ ] `PATCH /api/admin/users/:id` accepts any subset of:
-      `role`, `supervisor_id`, `is_active`; returns `400` if `supervisor_id`
-      points to a non-existent or non-supervisor user
-- [ ] `POST /api/admin/users/:id/reset-password` returns a one-time temporary
-      password and sets `must_change_password = true` (spec 007, spec 008)
+      `?role=user|supervisor|admin` and `?supervisor_id=<id>` and
+      `?is_active=true|false`
+- [ ] `POST /api/admin/users` enforces the unified 12-character strong password
+      policy (spec 007), sets `must_change_password = true`, and logs
+      `user_created` in `admin_audit_log` (spec 009)
+- [ ] `PATCH /api/admin/users/:id` accepts any subset of `role`,
+      `supervisor_id`, `is_active`, plus optional `reassign_cases_to` and
+      `reassign_subordinates_to`:
+  - Returns `400` if `supervisor_id` points to a non-existent, inactive, or
+    non-supervisor user
+  - When setting `is_active = false`: if the user owns active (non-archived)
+    cases and `reassign_cases_to` (an active user) is omitted, OR if the user
+    is a supervisor with direct subordinates and `reassign_subordinates_to` (an
+    active `supervisor` or `admin`) is omitted, returns **`409 Conflict`** with
+    `blocking_case_ids` and `blocking_subordinate_ids` (no silent fallback)
+  - Executes reassignment + deactivation atomically in one transaction and logs
+    all permission changes in `admin_audit_log` (spec 009)
+- [ ] `POST /api/admin/users/:id/reset-password` returns a one-time 12-char
+      temporary password, sets `must_change_password = true`, and logs
+      `password_reset` in `admin_audit_log` (spec 009)
+- [ ] `GET /api/admin/settings` and `PATCH /api/admin/settings` manage
+      `notification_threshold_days` (integer `1–365`, default `7`), logging
+      `settings_updated` in `admin_audit_log`
 
 ### Frontend
-- [ ] The Admin Panel is a top-level page accessible only when `role = admin`;
+- [ ] The Admin Panel lives at `/admin`, accessible only when `role = admin`;
       non-admins navigating to `/admin` are redirected to `/`
-- [ ] The panel has three tabs: **Użytkownicy**, **Import / Export**,
-      **Ustawienia systemowe**
+- [ ] The panel has **4 tabs**:
+  1. **Użytkownicy** (Users)
+  2. **Ustawienia systemowe** (System Settings)
+  3. **Dziennik audytu** (Audit Log — spec 009)
+  4. **Kopie zapasowe** (Backups — spec 017)
 - [ ] **Użytkownicy tab:**
-  - [ ] Displays a table: email, role badge, supervisor email, active status
-  - [ ] "Dodaj użytkownika" button opens a modal form with fields:
-        email, temporary password, role, supervisor (if role = user)
-  - [ ] Clicking a row opens an edit modal: change role, supervisor,
-        active status, or trigger password reset
-  - [ ] "Reset hasła" button in the edit modal shows the generated temporary
-        password in a one-time reveal dialog with a copy button
-  - [ ] Deactivating a user shows a confirmation dialog before saving
-- [ ] **Import / Export tab:**
-  - [ ] Drag-and-drop / file picker for Excel upload (spec 004)
-  - [ ] Import summary modal after upload
-  - [ ] "Pobierz Excel" button for export
+  - Displays table: email, role badge, supervisor email, active status
+  - **"Dodaj użytkownika"** modal: email, temporary password (12+ chars), role,
+    supervisor (if role = user)
+  - Row click opens edit modal: change role, supervisor, active status, or
+    trigger **"Reset hasła"** (one-time reveal dialog with copy button)
+  - Deactivating a user with active cases or subordinates prompts the admin to
+    select `reassign_cases_to` / `reassign_subordinates_to` in the confirmation
+    dialog before submitting
 - [ ] **Ustawienia systemowe tab:**
-  - [ ] Notification threshold (days before deadline) — editable number input
-  - [ ] Save button; changes take effect immediately for all users
+  - Editable `notification_threshold_days` (1–365); changes take effect
+    immediately across notifications (005), case row urgency colours (003), and
+    Dashboard `due_soon` (014)
+- [ ] **Dziennik audytu tab:**
+  - Displays paginated `admin_audit_log` entries (spec 009) with action filter
+- [ ] **Kopie zapasowe tab:**
+  - Create manual backup, list backups, and download with password
+    re-verification (spec 017)
 
 ## Out of Scope
 
 - Bulk user import from CSV / Excel
-- Audit log of admin actions in the UI (the `login_audit_log` table in spec 007
-  covers security events; a full admin audit trail is a future enhancement)
-- System configuration beyond the notification threshold
+- Excel case import / copy editing (lives at `/import`, reached from `/cases`
+  per spec 004)
+- System configuration beyond `notification_threshold_days`
 
 ## API Contract
 
-All endpoints are defined in specs 002, 004, and 007. This spec adds:
+User endpoints are defined in spec 002, password reset in spec 007, audit log
+in spec 009, and backups in spec 017. This spec defines:
 
 ### `GET /api/admin/settings`
 
@@ -105,9 +125,9 @@ New table `system_settings` (key-value store for global config):
 
 Seed row: `{ key: "notification_threshold_days", value: "7" }`.
 
-## Open Questions
+## Resolved Decisions (Indaba Council)
 
-- [ ] Should there be a system-wide "maintenance mode" toggle in settings?
-      → Out of scope for now.
-- [ ] Is the notification threshold per-team or global?
-      → Global for now; per-team thresholds are a future enhancement.
+- Admin Panel has 4 tabs: Users, Settings, Audit Log, Backups; Import / Full Excel Copy Editor lives at `/import` reached from `/cases` (N-21).
+- Admin user creation enforces 12-char password policy and sets `must_change_password = true` (N-18).
+- All admin permission changes are logged in `admin_audit_log` (N-22).
+- User/supervisor deactivation requires explicit `reassign_cases_to` / `reassign_subordinates_to` with `409 Conflict` when omitted (N-24).

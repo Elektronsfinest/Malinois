@@ -1,0 +1,92 @@
+# Debate: spec_debate
+
+Outcome: reached after 3 round(s).
+
+## Round 1: claude (CRITIQUE)
+
+```text
+This is my first-round top 8, ranked by how much each hurts the architecture diagram's requirements. It rests on a keyword grep of specs 002, 004, 005, 006, 008, 011, 012, 015 and 016, not a full read of every spec.
+
+1. **Spec 008 vs the diagram, 002 and 012 (password changes).** Spec 008 makes password changes self-service. The diagram says "maybe only admin". Specs 002 and 012 make reset admin-only, and 008's `must_change_password` flow sits on top of that. This is an open decision.
+2. **Spec 004 vs the diagram (Excel).** Spec 004 is import/export into the DB. The diagram has a separate full-Excel editor working on copies. The copy lifecycle, the merge-back path and who may use the editor are all unspecified.
+3. **Spec 011 vs the diagram (concurrent editing).** Spec 011 uses a `version` column on `cases` and offers "Nadpisz" (force overwrite). Neither covers the preliminary editor, notes (010) or Excel copies. Force overwrite also breaks the audit trail (009).
+4. **Specs 002, 004 and 015 vs the Excel editor (dates).** "Dates only admin" is enforced on `PATCH` and bulk. A full Excel editor or an import could bypass it.
+5. **Spec 009 vs 010 and 011 (edit log).** The edit log's coverage of notes, imports and overwrites is unclear.
+6. **Spec 006 vs 017 (retention).** Archive says "never hard-deleted", while backups imply restore and purge.
+7. **Spec 007 vs 008 (JWT).** In 008 the JWT stays valid after a password change, and `must_change_password` returns 403 on everything else. 008 also lacks accessibility settings.
+8. **Spec 005 (popups).** Popups are specced per user and dismissable. How they interact with archived cases and reassignment (016) is unclear.
+```
+
+## Round 1: agy (PROPOSAL)
+
+```text
+
+```
+
+## Round 2: claude (CRITIQUE)
+
+```text
+agy's round-1 reply was empty, so there is no second list to accept. I'm restating mine with two changes. It still comes from a keyword grep, not a full read of every spec, so spec details may be off.
+
+**Ranked top 8:**
+1. **Password changes (008 vs 002, 012 and the diagram).** Self-service in 008, admin-only elsewhere. This is a decision for the user, and the whole settings screen depends on it.
+2. **Excel editor on copies (004 vs the diagram).** The copy lifecycle, the merge-back path and who may use it are missing. This is the biggest new feature with no spec.
+3. **Date rule bypass (002, 004, 015 and the Excel editor).** Moved up from 4 in my first list. This is the one that can leak data.
+4. **Concurrency (011).** The `version` column covers only `cases`. It doesn't cover notes, the preliminary editor or Excel copies. "Nadpisz" (force overwrite) also conflicts with the audit trail.
+5. **Edit log coverage (009 vs 010, 011).** It's unclear whether notes, imports and overwrites are logged.
+6. **JWT after a password change (007 vs 008).** The old token stays valid.
+7. **Archive vs backups (006 vs 017).** "Never hard-deleted" conflicts with restore and purge.
+8. **Missing accessibility settings (008).** The diagram requires them. This replaces popups and reassignment (005 and 016), which is a minor interaction.
+
+I added the accessibility gap because the diagram asks for it explicitly. Also, "non-local server" may conflict with the localhost defaults in AGENTS.md (CORS, SQLite). I'd check that before finalizing.
+```
+
+## Round 2: agy (CRITIQUE)
+
+```text
+Full read disproves Claude's #5 (009 logs imports/PATCH; 010 excludes notes) and #7 (017 prunes backup files, not cases); #3 is overstated (004 admin-only; 015 bans dates). Missing RBAC, status, notes, and contract conflicts.
+
+**Top 8:**
+1. **Excel copy & preliminary editors (004, 003, 007, diagram):** 004 is admin import/export, 007 bans disk files, 003 misreferences 004; missing editor risks date bypass (002).
+2. **Passwords & accessibility (008, 002, 007, 012, diagram):** Self-service change clashes with "maybe only admin" (breaks 007/012 `must_change_password`) and omits accessibility.
+3. **RBAC bugs (002, 006, 014–016):** 002 omits supervisors' own cases (014–016 include); 015 lets `user` bulk-restore, violating 006.
+4. **Concurrency bypassed (011, 004, 015, 016, diagram):** Import, bulk, reassign, Excel copies ignore `version`.
+5. **`403` vs `404` (007, 002, 003, 005):** 007 forbids `404` on unauthorised cases; 002/003/005 require it.
+6. **Duplicate notes (003, 010):** `cases.note` conflicts with immutable `case_notes`.
+7. **API & `/` collision (003, 013, 014):** 013 paginates `GET /api/cases`; 014 puts Dashboard & Main on `/`.
+8. **Dates (003, 004, 013):** 003 blocks past deadlines (004 imports overdue); Polish format unspecified.
+```
+
+## Round 3: claude (AGREEMENT)
+
+```text
+I accept agy's ranked top 8 as final.
+
+agy's full read corrects my keyword-grep list in three places:
+- **Edit log (my #5):** 009 does log imports and `PATCH`, and 010 excludes notes, so there is no gap.
+- **Archive vs backups (my #7):** 017 prunes backup files, not cases, so it doesn't conflict with 006.
+- **Date bypass (my #3):** 004 is admin-only and 015 bans dates, so the risk is overstated. It only matters once the missing Excel editor exists, and agy's #1 covers that.
+
+agy's list also finds four things I missed: the RBAC gaps (002 omits supervisors' own cases, and 015 lets `user` bulk-restore against 006), the `403` vs `404` conflict, the duplicate notes (`cases.note` vs `case_notes`), and the `/` route collision. I didn't check these claims myself, but each is a concrete contradiction between specs, so I'm taking them as read.
+
+Two caveats for whoever implements this:
+- **Passwords and accessibility (#2):** this is a decision for the user, not a spec bug, and it may deserve to be #1. Everything in the settings spec depends on it.
+- **JWT after a password change (007 vs 008):** the old token stays valid. This dropped off the list, so it's worth a one-line note when #2 is resolved.
+```
+
+## Round 3: agy (AGREEMENT)
+
+```text
+We have consensus on the final ranked top 8 inconsistencies:
+
+1. **Excel copy & preliminary editors (004, 003, 007, diagram)** — missing specs, disk-write ban, misreference in 003, date-bypass risk.
+2. **Passwords & accessibility (008, 002, 007, 012, diagram)** — self-service vs. admin-only password change (`must_change_password` conflict) and missing accessibility settings.
+3. **RBAC bugs (002, 006, 014–016)** — supervisor own-case omission in 002; `user` bulk-restore allowed in 015 against 006.
+4. **Concurrency bypassed (011, 004, 015, 016, diagram)** — import, bulk, reassign, and Excel copies bypass `version`.
+5. **`403` vs `404` (007, 002, 003, 005)** — 007 bans `404` on unauthorised cases while 002/003/005 require it.
+6. **Duplicate notes (003, 010)** — mutable `cases.note` conflicts with immutable `case_notes`.
+7. **API & `/` collision (003, 013, 014)** — 013 paginates `GET /api/cases`; 014 puts Dashboard and Main on `/`.
+8. **Dates (003, 004, 013)** — 003 blocks past deadlines; Polish UI display format is unspecified.
+
+Agreed on both caveats: #2 requires an upfront product decision (blocking settings), and resolving it should also settle post-password-change JWT invalidation (007 vs 008).
+```

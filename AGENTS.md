@@ -12,7 +12,7 @@ This file describes the project structure, tech stack, conventions, and rules fo
 - **GitHub Actions** CI for both apps
 - A shared `packages/` directory for cross-app types
 
-The app is a **ZUS (Social Insurance) case-management system** for tracking deadlines and cases imported from Excel. It implements:
+The app is a **case-management and deadline-tracking system** (built as a trainee project) for tracking deadlines and client cases imported from Excel. It implements:
 - JWT-based authentication with three user roles (admin / supervisor / user)
 - Role-scoped case visibility and editing (users see own cases, supervisors see team, admins see all)
 - Excel import/export of case data with date parsing
@@ -153,9 +153,15 @@ Always commit migration files in `alembic/versions/`. The `env.py` is already co
 ### Key Files
 
 **`src/router.tsx`**
-- Two routes: `/` (dashboard, protected) and `/login`
-- `beforeLoad` on `/`: redirects to `/login` if no token and not loading
-- `beforeLoad` on `/login`: redirects to `/` if already authenticated
+- Target routes (current auth MVP implements `/` and `/login`; full app routes per `specs/DEPENDENCY_MAP.md`):
+  - `/login` (public — redirects authenticated users to `/`)
+  - `/` (Dashboard — landing page after login, `spec 014`)
+  - `/cases` (Main case table & inline Edytor wstępny, `spec 003`, `013`, `015`)
+  - `/import` (Full Excel Copy Editor, `spec 004`, reached from `/cases`)
+  - `/archive` (Case Archive, `spec 006`)
+  - `/settings` (User Settings & Accessibility, `spec 008`; forced target when `must_change_password = true`)
+  - `/admin` (Admin Panel — 4 tabs: Users, Settings, Audit Log, Backups; `admin` only, `spec 012`)
+- `beforeLoad` guards redirect unauthenticated users to `/login`, force `must_change_password` users to `/settings`, and redirect non-admins away from `/admin`
 - Router context carries `auth: AuthContextValue` — injected in `App.tsx`
 
 **`src/context/AuthContext.tsx`**
@@ -286,37 +292,57 @@ The API defaults to **SQLite** (`dev.db`) when `DATABASE_URL` is not set — no 
 
 ## Role System
 
-Three roles control data visibility and edit permissions:
+Three roles control data visibility and edit permissions (see `specs/DEPENDENCY_MAP.md` for full matrix):
 
-| Role | Polish | Sees | Can Edit |
+| Role | Polish | Sees (Active / Archive) | Can Edit |
 |---|---|---|---|
-| `user` | Podrzędny | Own cases only | Own cases (no dates) |
-| `supervisor` | Nadrzędny | Own + all direct subordinates' cases | Subordinates' cases (no dates) |
-| `admin` | Administrator | All cases | All fields including dates |
+| `user` | Podrzędny | Own cases / own + past-assignee (read-only) | Own non-date fields (no dates, no restore) |
+| `supervisor` | Nadrzędny | Own + direct subordinates (1-level) | Own + subordinates' non-date fields, team reassign, restore (no dates) |
+| `admin` | Administrator | All cases | All fields including dates (date edits require audit `reason`) |
 
 **Critical rules for agents:**
-- Date fields (`deadline`, `date_filed`) may only be written by `admin` — always enforce this in route handlers
-- Role and `supervisor_id` can only be changed via `/api/admin/users/:id` — never via self-service endpoints
-- Always filter case queries by role; never return rows the user is not authorised to see
-- Use the `get_current_user` dependency from `routers/auth.py` on every protected route
+- Date fields (`deadline`, `date_filed`) may only be written by `admin` (including on `POST /api/cases`) — always enforce this in the unified case service layer
+- Role and `supervisor_id` can only be changed via `/api/admin/users/:id` — never via self-service endpoints; deactivation requires explicit `reassign_cases_to` / `reassign_subordinates_to` (`409` if omitted while blocking records exist)
+- Always filter case queries by role; return `404 Not Found` for non-existent or out-of-scope cases, and reserve `403 Forbidden` for role-gated endpoints and unauthorized actions/fields on in-scope resources
+- JWT carries `sub` (email) only; `get_current_user` loads `role`, `is_active`, and `must_change_password` from the DB on every request
 - Implement role checks as a reusable `require_role(*roles)` dependency — do not duplicate inline
+- Every case mutation (`PATCH`, `archive`, `restore`, `bulk`, `reassign`, `import commit`) must check and increment `cases.version` (`409 Conflict` on mismatch)
+- `GET /api/cases` always returns `{ items, total, page, page_size }`
 
 ---
 
 ## Security Rules (enforced in all code)
 
-- **Never** store or log plain-text passwords
+- **Never** store or log plain-text passwords; enforce unified **12-character** strong password policy everywhere
 - **Never** interpolate user input into raw SQL strings — use SQLAlchemy ORM only
 - **Never** use `dangerouslySetInnerHTML` with user-supplied data in React
-- **Never** write uploaded files to disk — process in memory only
+- **Never** write uploaded files to disk — parse in memory into `working_copies.rows_json` (24h TTL, max 5/user) and stream `.xlsx` downloads from memory
 - **Never** use the client-supplied filename in any server-side path operation
 - Uploaded files must be validated by MIME type **and** extension before processing
 - Cap file upload size at 10 MB (`413` for oversized requests)
+- Backup downloads require admin password re-verification and are logged in `admin_audit_log`
 - All endpoints must set security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`
 - `JWT_SECRET_KEY` must be an env var — reject the dev default if `ENV=production`
 - Rate-limit `POST /api/login` to 10 requests/minute/IP (`429` on excess)
 - Log all failed logins (timestamp, IP, email attempted — never the password)
 - See [spec 007](specs/007-security/spec.md) for the full security specification
+
+---
+
+## Project Skills (`.agents/skills/`)
+
+| Skill | Purpose |
+|---|---|
+| `spec-first` | Spec-first workflow (spec → review → plan → tasks → impl → gate) |
+| `architect` | Single-DB architecture, unified case service layer, route & pagination contracts |
+| `security-guard` | Auth, 12-char password policy, `sub`-only JWT, `404`/`403` anti-enumeration, in-memory uploads |
+| `rbac-cases` | Role matrix, date immutability, `version` optimistic locking, `case_notes`, safe deactivation |
+| `excel-pipeline` | Full Excel Copy Editor (`working_copies`), Polish + native dates, pre-import backup, streaming export |
+| `migrations` | Alembic + SQLAlchemy 2.0 `Mapped[]` with SQLite + PostgreSQL parity |
+| `styling-design-system` | Dark-blue glassmorphic palette (`#03071e`–`#48cae4`), `Plus Jakarta Sans`, urgency & a11y tokens |
+| `accessibility` | WCAG 2.1 AA, keyboard navigation, ARIA dialogs/live regions, font-size/high-contrast/reduced-motion |
+| `qa-testing` | `pytest` role-matrix & `409` tests, Vitest + Testing Library, Playwright E2E |
+| `debugger` | Diagnosing 401/403/409/422 errors, Alembic heads, TanStack Router guards, Excel parsing |
 
 ---
 
@@ -326,8 +352,12 @@ New features follow a spec-first process. **Write the spec before touching any
 code.** The agent reviews the spec, generates a plan and tasks, then
 implements and tests one task at a time.
 
+See [specs/DEPENDENCY_MAP.md](specs/DEPENDENCY_MAP.md) for the master dependency
+graph, route map, role matrix, and Indaba resolution audit trail.
+
 ```
 specs/
+├── DEPENDENCY_MAP.md ← master architecture, route map, role matrix, invariants
 └── <NNN>-<slug>/
     ├── spec.md    ← human-written feature spec (required before coding)
     ├── plan.md    ← technical decisions (agent-generated, human-approved)
@@ -344,22 +374,22 @@ The spec format reference (what every section means and common mistakes) is in:
 | # | Slug | Feature | Status |
 |---|---|---|---|
 | [001](specs/001-auth/spec.md) | auth | User Authentication | ✅ Done |
-| [002](specs/002-roles-and-permissions/spec.md) | roles-and-permissions | Role-Based Access Control | 📋 Spec |
-| [003](specs/003-case-management/spec.md) | case-management | Case Management | 📋 Spec |
-| [004](specs/004-excel-import/spec.md) | excel-import | Excel Import & Export | 📋 Spec |
-| [005](specs/005-notifications/spec.md) | notifications | Deadline Notifications | 📋 Spec |
-| [006](specs/006-archive/spec.md) | archive | Case Archive | 📋 Spec |
-| [007](specs/007-security/spec.md) | security | Security & Data Protection | 📋 Spec |
-| [008](specs/008-user-settings/spec.md) | user-settings | User Settings | 📋 Spec |
-| [009](specs/009-edit-history/spec.md) | edit-history | Edit History / Audit Log | 📋 Spec |
-| [010](specs/010-case-notes/spec.md) | case-notes | Case Notes | 📋 Spec |
-| [011](specs/011-concurrent-editing/spec.md) | concurrent-editing | Concurrent Editing | 📋 Spec |
-| [012](specs/012-admin-panel/spec.md) | admin-panel | Admin Panel & User Management | 📋 Spec |
-| [013](specs/013-search-and-filtering/spec.md) | search-and-filtering | Case Search & Filtering | 📋 Spec |
-| [014](specs/014-dashboard/spec.md) | dashboard | Dashboard & Summary Stats | 📋 Spec |
-| [015](specs/015-bulk-operations/spec.md) | bulk-operations | Bulk Case Actions | 📋 Spec |
-| [016](specs/016-case-reassignment/spec.md) | case-reassignment | Case Reassignment & Substitutions | 📋 Spec |
-| [017](specs/017-automated-backups/spec.md) | automated-backups | Automated Backups & Data Snapshots | 📋 Spec |
+| [002](specs/002-roles-and-permissions/spec.md) | roles-and-permissions | Role-Based Access Control | 📋 Spec (Resolved) |
+| [003](specs/003-case-management/spec.md) | case-management | Case Management | 📋 Spec (Resolved) |
+| [004](specs/004-excel-import/spec.md) | excel-import | Excel Import, Export & Full Copy Editor | 📋 Spec (Resolved) |
+| [005](specs/005-notifications/spec.md) | notifications | Deadline Notifications | 📋 Spec (Resolved) |
+| [006](specs/006-archive/spec.md) | archive | Case Archive | 📋 Spec (Resolved) |
+| [007](specs/007-security/spec.md) | security | Security & Data Protection | 📋 Spec (Resolved) |
+| [008](specs/008-user-settings/spec.md) | user-settings | User Settings & Accessibility | 📋 Spec (Resolved) |
+| [009](specs/009-edit-history/spec.md) | edit-history | Edit History & Audit Log | 📋 Spec (Resolved) |
+| [010](specs/010-case-notes/spec.md) | case-notes | Case & Person Notes | 📋 Spec (Resolved) |
+| [011](specs/011-concurrent-editing/spec.md) | concurrent-editing | Concurrent Editing & Draft Protection | 📋 Spec (Resolved) |
+| [012](specs/012-admin-panel/spec.md) | admin-panel | Admin Panel | 📋 Spec (Resolved) |
+| [013](specs/013-search-and-filtering/spec.md) | search-and-filtering | Case Search & Filtering | 📋 Spec (Resolved) |
+| [014](specs/014-dashboard/spec.md) | dashboard | Dashboard & Summary Stats | 📋 Spec (Resolved) |
+| [015](specs/015-bulk-operations/spec.md) | bulk-operations | Bulk Case Actions | 📋 Spec (Resolved) |
+| [016](specs/016-case-reassignment/spec.md) | case-reassignment | Case Reassignment & Substitutions | 📋 Spec (Resolved) |
+| [017](specs/017-automated-backups/spec.md) | automated-backups | Automated Backups & Data Snapshots | 📋 Spec (Resolved) |
 
 ---
 

@@ -1,6 +1,6 @@
 # Malinois
 
-A full-stack web application for managing ZUS (Social Insurance) case deadlines.
+A full-stack web application for managing client case deadlines.
 Cases are imported from Excel, deadline alerts are shown to the right people at
 the right time, and a strict role system ensures users only see and edit what
 they are permitted to.
@@ -9,7 +9,7 @@ they are permitted to.
 
 ## Purpose
 
-The system monitors deadlines for ZUS cases handled on behalf of clients.
+The system monitors deadlines for cases handled on behalf of clients.
 It replaces manual Excel tracking with a centralised, multi-user web app that:
 
 - Imports case data (dates, clients, assignments) from Excel files

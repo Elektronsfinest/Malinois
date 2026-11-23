@@ -2,22 +2,21 @@
 
 ## Goal
 
-Let users quickly narrow down their case list using filters and a search box.
-As the number of imported cases grows, scrolling through a flat list becomes
-impractical. Filtering by deadline range, status, assigned user, and client
-name gives everyone — from a regular user with a few cases to an admin with
-hundreds — a usable interface.
+Let users quickly narrow down their case list on `/cases` (and `/archive`)
+using filters and a search box. Filtering by deadline range, overdue/due-soon
+status, case status, assigned user, and client name/title gives every role a
+fast, bookmarkable workspace.
 
 ## User Stories
 
-- As a regular user, I want to filter my cases by status (open / closed) so
-  that I can focus on what still needs attention.
-- As a regular user, I want to search by client name or case title so that I
-  can jump to a specific case without scrolling.
-- As a supervisor, I want to filter by team member so that I can review one
-  person's workload at a time.
-- As a supervisor, I want to filter by deadline range so that I can see what's
-  due this week across the whole team.
+- As a regular user, I want to filter my cases by status (open / closed) or
+  overdue flag so that I can focus on what still needs attention.
+- As a regular user, I want to search by client name, case number, or case
+  title so that I can jump to a specific case without scrolling.
+- As a supervisor, I want to filter by myself or any direct subordinate so that
+  I can review one person's workload at a time.
+- As a supervisor, I want to filter by deadline range or `due_soon` so that I
+  can see what's approaching across my team.
 - As an admin, I want to combine filters freely so that I can produce any
   ad-hoc view I need.
 
@@ -25,44 +24,51 @@ hundreds — a usable interface.
 
 ### Backend
 - [ ] `GET /api/cases` accepts the following optional query parameters:
-  - `q` — full-text search across `title` and `client_name` (case-insensitive,
-    partial match)
+  - `q` — case-insensitive partial match across `case_number`, `title`, and
+    `client_name`
   - `status` — `open | closed`
-  - `assigned_to` — user ID; supervisors may filter by any subordinate ID;
-    regular users may only filter by their own ID; admin can filter by any
-  - `deadline_from` — ISO 8601 date; returns cases with `deadline ≥` this date
-  - `deadline_to` — ISO 8601 date; returns cases with `deadline ≤` this date
-  - `archived` — `true | false` (default `false`); mirrors the archive filter
-    from spec 006
-- [ ] All filters are combinable (AND logic)
-- [ ] The endpoint still enforces role-based row visibility before applying
-      filters — a user cannot access cases outside their permission scope by
-      crafting a filter
-- [ ] `assigned_to` filter for a regular user returns `403` if the target ID
-      is not their own
-- [ ] Results are sorted by `deadline ASC` by default; a `sort` param accepts
+  - `assigned_to` — user ID:
+    - `user`: may only filter by their own ID (`403` otherwise)
+    - `supervisor`: may filter by their own ID OR any direct subordinate ID
+      (`403` otherwise)
+    - `admin`: may filter by any user ID
+  - `deadline_from` — ISO 8601 date (`YYYY-MM-DD`); returns cases with
+    `deadline >= deadline_from`
+  - `deadline_to` — ISO 8601 date (`YYYY-MM-DD`); returns cases with
+    `deadline <= deadline_to`
+  - `overdue` — `true | false`; when `true`, returns open cases where
+    `deadline < today_warsaw` (strictly past in `Europe/Warsaw` timezone;
+    today's deadline is NOT overdue)
+  - `due_soon` — `true | false`; when `true`, returns open cases where
+    `today_warsaw <= deadline <= today_warsaw + notification_threshold_days`
+  - `archived` — `true | false` (default `false`); mirrors spec 006 (including
+    past-assignee visibility when `archived=true`)
+- [ ] All filters are combinable (AND logic) and applied **after** role-based
+      visibility scoping
+- [ ] Default sort is `deadline ASC NULLS LAST`; `sort` param accepts
       `deadline_asc | deadline_desc | updated_at_desc`
-- [ ] Pagination: `page` (default 1) and `page_size` (default 50, max 200)
-      query params; response includes `total`, `page`, `page_size`
+- [ ] Pagination: `page` (default `1`) and `page_size` (default `50`, max `200`);
+      response ALWAYS uses the unified shape `{ items, total, page, page_size }`
+      (consistent across specs 002, 003, 006, 013)
 
 ### Frontend
-- [ ] The Main page header has a search input that filters by `q` as the user
-      types (debounced 300 ms)
-- [ ] A filter bar below the header has dropdowns / date pickers for:
-      status, assigned user (supervisor/admin only), deadline from, deadline to
-- [ ] Active filters are shown as dismissable chips above the case table
-- [ ] "Wyczyść filtry" button resets all filters at once
-- [ ] Filter state is preserved in the URL query string so that a filtered view
-      can be bookmarked or shared
-- [ ] Pagination controls appear at the bottom of the table when `total >
-      page_size`
+- [ ] The `/cases` header has a search input filtering by `q` (debounced 300 ms)
+- [ ] Filter bar below header provides dropdowns/pickers for: status, assigned
+      user (supervisor: self + direct subordinates; admin: all), `deadline_from`,
+      `deadline_to`, and quick toggles for "Zaległe" (`overdue=true`) and
+      "Zbliżający się termin" (`due_soon=true`)
+- [ ] Active filters appear as dismissable chips with a **"Wyczyść filtry"**
+      button
+- [ ] Filter state is synced with URL search params via TanStack Router so
+      filtered views (including Dashboard card links) are bookmarkable
+- [ ] Pagination controls appear below the table when `total > page_size`
 
 ## Out of Scope
 
 - Saved / named filter presets
-- Full-text search across notes (spec 010) or edit history (spec 009)
-- Elasticsearch or other dedicated search engine — SQLite/Postgres LIKE queries
-  are sufficient for the expected data volume
+- Full-text search across `case_notes` (spec 010) or `case_edit_log` (spec 009)
+- Dedicated search engines (Elasticsearch) — SQLAlchemy `ILIKE` / `LIKE` with
+  B-tree indices is sufficient for expected data volume
 
 ## API Contract
 
@@ -70,52 +76,43 @@ hundreds — a usable interface.
 
 **Example request**
 ```
-GET /api/cases?status=open&deadline_to=2027-01-31&sort=deadline_asc&page=1&page_size=20
+GET /api/cases?status=open&overdue=true&sort=deadline_asc&page=1&page_size=20
 Authorization: Bearer <jwt>
 ```
 
 **200 OK**
 ```json
 {
-  "total": 47,
-  "page": 1,
-  "page_size": 20,
-  "results": [
+  "items": [
     {
       "id": 1,
+      "case_number": "CASE-2027-0001",
       "title": "Sprawa emerytalna – Kowalski",
       "client_name": "Jan Kowalski",
       "assigned_to": 3,
       "deadline": "2027-01-10",
+      "date_filed": "2026-11-01",
       "status": "open",
       "archived": false,
       "version": 2
     }
-  ]
+  ],
+  "total": 47,
+  "page": 1,
+  "page_size": 20
 }
 ```
 
-**400 Bad Request** — invalid date format or unknown `sort` value  
-**403 Forbidden** — `assigned_to` filter targets a user outside the caller's
-scope
+**400 Bad Request** — invalid ISO date format, invalid `page`/`page_size`, or unknown `sort` value  
+**403 Forbidden** — `assigned_to` filter targets a user outside the caller's scope
 
 ## Data Model Changes
 
-No new tables. Requires a database index on `cases.title` and
-`cases.client_name` for `LIKE` queries to be fast enough:
+Indices on `cases` (created in spec 003 migration): `case_number`, `title`,
+`client_name`, `assigned_to`, `deadline`, `archived`.
 
-```sql
-CREATE INDEX idx_cases_title ON cases (title);
-CREATE INDEX idx_cases_client_name ON cases (client_name);
-```
+## Resolved Decisions (Indaba Council)
 
-Add to the Alembic migration for spec 003 (or as a follow-up migration).
-
-## Open Questions
-
-- [ ] Should `q` search case notes (spec 010) as well?
-      → Out of scope for this spec; can be added later.
-- [ ] Is the Polish locale accent-insensitive search needed
-      (e.g. "Kowalski" matches "Kowalski" with or without diacritics)?
-      → Nice to have; depends on the database collation. Flag as a future
-      enhancement.
+- Unified response key `items` (`{ items, total, page, page_size }`) across 002, 003, 006, 013 (N-14).
+- Supervisors can filter by their own ID as well as direct subordinates (N-03).
+- Dedicated `overdue=true` (`deadline < today` in `Europe/Warsaw`) and `due_soon=true` (using `notification_threshold_days`) query parameters added (N-15, N-16).
