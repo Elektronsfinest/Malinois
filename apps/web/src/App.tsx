@@ -11,10 +11,6 @@ function AppRouter() {
     void router.invalidate();
   }, [auth.token, auth.user, auth.isLoading]);
 
-  if (auth.isLoading) {
-    return <p>Ładowanie...</p>;
-  }
-
   return <RouterProvider router={router} context={{ auth }} />;
 }
 

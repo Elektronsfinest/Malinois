@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { User } from "../api/auth";
+import type { LoginResponse, User } from "../api/auth";
 
 export interface AuthContextValue {
   token: string | null;
@@ -7,6 +7,8 @@ export interface AuthContextValue {
   isLoading: boolean;
   authError: string | null;
   login: (email: string, password: string) => Promise<void>;
+  authenticate: (email: string, password: string) => Promise<LoginResponse>;
+  commitLogin: (data: LoginResponse) => void;
   logout: () => void;
 }
 
