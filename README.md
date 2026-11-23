@@ -244,6 +244,9 @@ npm run test:e2e
 | [012](specs/012-admin-panel/spec.md) | Admin Panel & User Management | 📋 Spec ready |
 | [013](specs/013-search-and-filtering/spec.md) | Case Search & Filtering | 📋 Spec ready |
 | [014](specs/014-dashboard/spec.md) | Dashboard & Summary Stats | 📋 Spec ready |
+| [015](specs/015-bulk-operations/spec.md) | Bulk Case Actions | 📋 Spec ready |
+| [016](specs/016-case-reassignment/spec.md) | Case Reassignment & Substitutions | 📋 Spec ready |
+| [017](specs/017-automated-backups/spec.md) | Automated Backups & Data Snapshots | 📋 Spec ready |
 
 ---
 

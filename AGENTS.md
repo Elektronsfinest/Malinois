@@ -357,6 +357,9 @@ The spec format reference (what every section means and common mistakes) is in:
 | [012](specs/012-admin-panel/spec.md) | admin-panel | Admin Panel & User Management | 📋 Spec |
 | [013](specs/013-search-and-filtering/spec.md) | search-and-filtering | Case Search & Filtering | 📋 Spec |
 | [014](specs/014-dashboard/spec.md) | dashboard | Dashboard & Summary Stats | 📋 Spec |
+| [015](specs/015-bulk-operations/spec.md) | bulk-operations | Bulk Case Actions | 📋 Spec |
+| [016](specs/016-case-reassignment/spec.md) | case-reassignment | Case Reassignment & Substitutions | 📋 Spec |
+| [017](specs/017-automated-backups/spec.md) | automated-backups | Automated Backups & Data Snapshots | 📋 Spec |
 
 ---
 
