@@ -36,24 +36,24 @@ Implementation plan derived from [Elektronsfinest/Malinois#5](https://github.com
 
 ```mermaid
 flowchart TD
-    Client["React 19 Frontend (TanStack Router)"] -->|HTTPS + JWT (sub-only)| APIGateway["FastAPI Gateway (/api)"]
+    Client["React 19 Frontend (TanStack Router)"] -->|"HTTPS + JWT (sub-only)"| APIGateway["FastAPI Gateway (/api)"]
     
     subgraph AuthSecurity ["Authentication & Guardrails"]
         APIGateway --> CurrentUser["get_current_user Dependency"]
         CurrentUser --> DBUser["Load Role & is_active from DB"]
-        DBUser -->|is_active=False| Auth401["401 Unauthorized / Re-login Modal"]
-        DBUser -->|must_change_password=True| PwdGate["403 password_change_required"]
+        DBUser -->|"is_active=False"| Auth401["401 Unauthorized / Re-login Modal"]
+        DBUser -->|"must_change_password=True"| PwdGate["403 password_change_required"]
     end
 
     subgraph ServiceLayer ["Unified Case Service Layer"]
         DBUser --> CaseService["Case Service Layer"]
-        CaseService --> Scoping["RBAC Scoping Filter<br/>User: Own | Supervisor: Own+Direct | Admin: All"]
-        Scoping -->|Out of Scope / Missing| Res404["404 Not Found (Anti-enumeration)"]
-        Scoping -->|Role Violation| Res403["403 Forbidden"]
+        CaseService --> Scoping["RBAC Scoping Filter - User: Own / Supervisor: Own+Direct / Admin: All"]
+        Scoping -->|"Out of Scope / Missing"| Res404["404 Not Found (Anti-enumeration)"]
+        Scoping -->|"Role Violation"| Res403["403 Forbidden"]
         
         CaseService --> Concurrency["Version Validator (Optimistic Locking)"]
-        Concurrency -->|version != current.version| Res409["409 Conflict (Returns current)"]
-        Concurrency -->|version == current.version| Mutation["Execute Mutation & Increment version"]
+        Concurrency -->|"version != current.version"| Res409["409 Conflict (Returns current)"]
+        Concurrency -->|"version == current.version"| Mutation["Execute Mutation & Increment version"]
     end
 
     subgraph Storage ["Single-DB Persistence (PostgreSQL / SQLite)"]
@@ -65,11 +65,11 @@ flowchart TD
     end
 
     subgraph ExcelFlow ["Excel Pipeline (Zero Disk I/O)"]
-        Client -->|Upload .xlsx in-memory| ParseStream["In-Memory Parser (Polish + ISO dates)"]
+        Client -->|"Upload .xlsx in-memory"| ParseStream["In-Memory Parser (Polish + ISO dates)"]
         ParseStream --> CopiesTable
-        CopiesTable -->|Explicit Commit| CaseService
-        CaseService -->|Pre-import Snapshot| BackupsTable
-        CaseService -->|Export Request| MemoryStream["In-Memory Streaming XLSX"]
+        CopiesTable -->|"Explicit Commit"| CaseService
+        CaseService -->|"Pre-import Snapshot"| BackupsTable
+        CaseService -->|"Export Request"| MemoryStream["In-Memory Streaming XLSX"]
         MemoryStream --> Client
     end
 ```
