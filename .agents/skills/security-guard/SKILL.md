@@ -38,11 +38,14 @@ and frontend view must satisfy `specs/007-security/spec.md` without exception.
      unauthorized actions/fields on an **in-scope** resource (non-admin writing
      dates, regular `user` calling restore, `must_change_password`).
 4. **In-Memory Uploads & Safe Downloads:**
-   - Validate Excel uploads by **both** MIME type and extension (`.xlsx`/`.xls`).
+   - Validate Excel uploads by **both** MIME type and extension (`.xlsx`/`.xlsm`/`.xls`
+     for data imports; `.xlsx`/`.xlsm` for admin-only empty templates).
    - Enforce **10 MB** upload cap (`413 Payload Too Large`).
-   - Parse strictly in memory and store rows in `working_copies.rows_json` —
-     **never write uploaded files to disk** and never use client filenames in
-     filesystem paths.
+   - Parse data imports strictly in memory and **never store user-data Excel
+     files on disk or in the database**; store only the admin-managed **empty**
+     template in `excel_templates` (validated by schema check + zero PII rows,
+     VBA macros never executed on server) and stream template-filled exports
+     from memory. Never use client filenames in filesystem paths.
    - Backup downloads (`POST /api/admin/backups/:filename/download`) require
      **admin password re-verification**, strict filename allowlist (no `..`,
      `/`, `\`), and logging to `admin_audit_log`.

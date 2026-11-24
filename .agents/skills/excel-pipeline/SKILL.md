@@ -1,54 +1,71 @@
 ---
 name: excel-pipeline
 description: >-
-  Use when implementing or modifying the Full Excel Copy Editor (/import),
-  .xlsx/.xls parsing, Polish/native date conversion, working_copies storage,
-  conflict resolution, or in-memory Excel export streaming in Malinois.
+  Use when implementing or modifying Excel data import (/import), admin empty
+  .xlsx/.xlsm template upload and schema validation (excel_templates),
+  Polish/native date conversion, duplicate conflict resolution, or in-memory
+  template-filled Excel export streaming in Malinois.
 ---
 
-# Excel Copy Editor & Import/Export Pipeline — Malinois
+# Excel Import & Template-Based Export Pipeline — Malinois
 
-Implements `specs/004-excel-import/spec.md` in alignment with `appbuild.drawio.xml`
-("strona działa tylko na kopiach prawdziwych dokumentów") and `specs/007-security/spec.md`
-(strict zero-disk upload rule).
+Implements `specs/004-excel-import/spec.md` and `specs/007-security/spec.md`.
+All live case editing happens directly in PostgreSQL (`/cases`, `spec 003`)
+with optimistic locking (`version`, `spec 011`). **No user-data Excel files are
+ever stored on the server** — imports are parsed strictly in memory and exports
+populate an admin-managed **empty** template in memory and stream it directly.
 
 ---
 
-## Architecture: Working Copies, Never Disk Files
+## Architecture: Direct DB Editing + Empty Template Export (Zero Disk I/O)
 
-1. **No Disk Writes Ever:**
-   - Validate uploads by MIME type **and** `.xlsx`/`.xls` extension, max **10 MB**
+1. **No Disk Writes & Zero Stored Data Files:**
+   - Validate all Excel uploads by MIME type **and** extension (`.xlsx`/`.xlsm`
+     for templates; `.xlsx`/`.xlsm`/`.xls` for data imports), max **10 MB**
      (`413` if larger).
-   - Parse bytes in memory (`io.BytesIO`) and store structured rows in
-     `working_copies.rows_json` (single DB).
-   - Never use the client-supplied filename in any filesystem operation.
-   - Generate downloads (`GET /api/import/copies/:id/download`) in memory and
-     stream via `StreamingResponse`.
-2. **Lifecycle Limits:**
-   - Every working copy has a **24-hour TTL** (`expires_at = created_at + 24h`).
-   - Maximum **5 active copies per user** (`409 Conflict` on 6th).
-   - Two entry points:
-     - `POST /api/import/copies/upload` (`admin` only) — parse uploaded file.
-     - `POST /api/import/copies/from-cases` (all roles) — snapshot caller's
-       visible live cases into an editable copy.
-3. **Full-Sheet Preservation & Pending Business Schema:**
-   - **Important:** The real Excel workbook has **not yet been delivered by
-     the business**. Keep all column header matching inside a single
-     configurable mapping adapter — never hardcode provisional column names
-     across routes, services, or frontend grid components.
-   - Provisional placeholder columns (subject to update once business delivers
-     the sample file): `Nr sprawy / Case Number`, `Tytuł / Title`,
-     `Klient / Client`, `Przypisany / Assigned To`, `Termin / Deadline`,
-     `Data złożenia / Date Filed` (optional), `Uwagi / Note` (optional).
-   - Any additional/unmapped columns are preserved verbatim in `extra_columns`
-     JSON per row so the full workbook can be edited and re-downloaded cleanly
-     without schema lock-in.
+   - Never write uploaded or generated files to server disk, and never use
+     client-supplied filenames in any filesystem operation.
+   - Never execute VBA macros on the server — `.xlsm` macros are preserved
+     passively in the template binary and run only on the user's machine.
+2. **Admin Empty Template Management (`excel_templates`):**
+   - `GET /api/admin/excel-template` / `PUT /api/admin/excel-template` (`admin`
+     only; `403` for others).
+   - Stores the empty `.xlsx` or `.xlsm` template bytes in PostgreSQL/SQLite
+     (`excel_templates.content` `LargeBinary`) with `is_active = True`
+     (deactivating previous versions) and logs `excel_template_updated` in
+     `admin_audit_log`.
+   - **Mandatory Schema Check on Upload (`400` on failure):**
+     1. Required data sheet name(s) exist.
+     2. Header row matches expected schema columns (via the swappable mapping
+        adapter).
+     3. **Zero PII / data rows:** reject if any data rows below the header are
+        populated.
+3. **On-Demand Template-Filled Export (`GET /api/cases/export`):**
+   - Available to all authenticated roles; queries live cases from PostgreSQL
+     strictly filtered by caller's role scope (`spec 002`) and active filters.
+   - Loads the active empty template from `excel_templates` into `io.BytesIO`
+     using `openpyxl.load_workbook(..., keep_vba=True)` when `has_macros=True`.
+   - Writes live case rows into the data sheet, sets `refreshOnLoad = True` on
+     any pivot table caches so Excel refreshes pivots and formulas on open, and
+     streams via `StreamingResponse`.
+   - Falls back to generating a clean in-memory `.xlsx` if no custom template
+     has been uploaded yet.
+4. **Pending Business Schema — Swappable Adapter:**
+   - **Important:** The real Excel workbook / template has **not yet been
+     delivered by the business**. Keep all sheet names, header matching, and
+     schema validation inside a single configurable adapter module — never
+     hardcode provisional column names across routes, services, or frontend
+     components.
+   - Provisional placeholder columns: `Nr sprawy / Case Number`,
+     `Tytuł / Title`, `Klient / Client`, `Przypisany / Assigned To`,
+     `Termin / Deadline`, `Data złożenia / Date Filed` (optional),
+     `Uwagi / Note` (optional).
 
 ---
 
-## Date Parsing & Conflict Rules
+## Import Preview, Date Parsing & Commit Rules (`admin` only)
 
-1. **Dual Date Support:**
+1. **Dual Date Support (`POST /api/import/preview`):**
    - Accept native Excel date cells (`datetime`/`date` objects from `openpyxl`)
      AND Polish text formats: `DD.MM.YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`.
    - Unparseable dates produce a per-row validation error — never silently
@@ -58,12 +75,10 @@ Implements `specs/004-excel-import/spec.md` in alignment with `appbuild.drawio.x
    - Duplicate `case_number` rows **within the same uploaded file** are blocked
      as preview validation errors.
    - Rows matching an existing DB `case_number` are flagged as conflicts with
-     live `{ id, version }` and require explicit per-row `skip` or
-     `update_existing` (no auto-merge).
-3. **Commit Guarantees (`POST /api/import/copies/:id/commit`):**
+     live `{ id, version }` and require explicit per-row `skip` (avoid
+     duplicates) or `update_existing` (no auto-merge).
+3. **Commit Guarantees (`POST /api/import/commit`):**
    - Reject with `400` if unresolved validation errors or conflicts remain.
-   - Non-admins editing live snapshot copies cannot modify `deadline` or
-     `date_filed` (`403`).
    - Automatically trigger a **`pre_import` backup snapshot** (`spec 017`)
      immediately before mutating live `cases`.
    - Route every row through the unified case service layer with per-row

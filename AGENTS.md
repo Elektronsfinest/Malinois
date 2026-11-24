@@ -157,7 +157,7 @@ Always commit migration files in `alembic/versions/`. The `env.py` is already co
   - `/login` (public — redirects authenticated users to `/`)
   - `/` (Dashboard — landing page after login, `spec 014`)
   - `/cases` (Main case table & inline Edytor wstępny, `spec 003`, `013`, `015`)
-  - `/import` (Full Excel Copy Editor, `spec 004`, reached from `/cases`)
+  - `/import` (Excel Data Import, `spec 004`, `admin` only, reached from `/cases`)
   - `/archive` (Case Archive, `spec 006`)
   - `/settings` (User Settings & Accessibility, `spec 008`; forced target when `must_change_password = true`)
   - `/admin` (Admin Panel — 4 tabs: Users, Settings, Audit Log, Backups; `admin` only, `spec 012`)
@@ -316,7 +316,7 @@ Three roles control data visibility and edit permissions (see `specs/DEPENDENCY_
 - **Never** store or log plain-text passwords; enforce unified **12-character** strong password policy everywhere
 - **Never** interpolate user input into raw SQL strings — use SQLAlchemy ORM only
 - **Never** use `dangerouslySetInnerHTML` with user-supplied data in React
-- **Never** write uploaded files to disk — parse in memory into `working_copies.rows_json` (24h TTL, max 5/user) and stream `.xlsx` downloads from memory
+- **Never** write uploaded files to disk or store user-data Excel files on the server — parse imports strictly in memory, store only the admin-managed **empty** `.xlsx`/`.xlsm` template in `excel_templates` (schema-checked, zero PII), and stream template-filled exports from PostgreSQL in memory
 - **Never** use the client-supplied filename in any server-side path operation
 - Uploaded files must be validated by MIME type **and** extension before processing
 - Cap file upload size at 10 MB (`413` for oversized requests)
@@ -337,7 +337,7 @@ Three roles control data visibility and edit permissions (see `specs/DEPENDENCY_
 | `architect` | Single-DB architecture, unified case service layer, route & pagination contracts |
 | `security-guard` | Auth, 12-char password policy, `sub`-only JWT, `404`/`403` anti-enumeration, in-memory uploads |
 | `rbac-cases` | Role matrix, date immutability, `version` optimistic locking, `case_notes`, safe deactivation |
-| `excel-pipeline` | Full Excel Copy Editor (`working_copies`), Polish + native dates, pre-import backup, streaming export |
+| `excel-pipeline` | Excel import preview/commit, admin empty `.xlsx`/`.xlsm` templates (`excel_templates` + schema check), Polish + native dates, pre-import backup, streaming export |
 | `migrations` | Alembic + SQLAlchemy 2.0 `Mapped[]` with SQLite + PostgreSQL parity |
 | `styling-design-system` | Dark-blue glassmorphic palette (`#03071e`–`#48cae4`), `Plus Jakarta Sans`, urgency & a11y tokens |
 | `accessibility` | WCAG 2.1 AA, keyboard navigation, ARIA dialogs/live regions, font-size/high-contrast/reduced-motion |
@@ -376,7 +376,7 @@ The spec format reference (what every section means and common mistakes) is in:
 | [001](specs/001-auth/spec.md) | auth | User Authentication | ✅ Done |
 | [002](specs/002-roles-and-permissions/spec.md) | roles-and-permissions | Role-Based Access Control | 📋 Spec (Resolved) |
 | [003](specs/003-case-management/spec.md) | case-management | Case Management | 📋 Spec (Resolved) |
-| [004](specs/004-excel-import/spec.md) | excel-import | Excel Import, Export & Full Copy Editor | 📋 Spec (Resolved) |
+| [004](specs/004-excel-import/spec.md) | excel-import | Excel Import & Template-Based Export | 📋 Spec (Resolved) |
 | [005](specs/005-notifications/spec.md) | notifications | Deadline Notifications | 📋 Spec (Resolved) |
 | [006](specs/006-archive/spec.md) | archive | Case Archive | 📋 Spec (Resolved) |
 | [007](specs/007-security/spec.md) | security | Security & Data Protection | 📋 Spec (Resolved) |

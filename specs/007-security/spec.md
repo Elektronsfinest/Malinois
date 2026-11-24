@@ -89,12 +89,18 @@ entire application and must be satisfied before any production deployment.
       interpolation into SQL
 
 ### File Upload & Backup Download Security
-- [ ] Uploaded Excel files (spec 004) are validated by MIME type **and** file
-      extension before processing; non-Excel files return `400`
+- [ ] Uploaded Excel files (data imports `.xlsx`/`.xlsm`/`.xls` and admin-only
+      empty templates `.xlsx`/`.xlsm`, spec 004) are validated by MIME type
+      **and** file extension before processing; non-Excel files return `400`
 - [ ] Upload file size is capped at **10 MB**; larger uploads return `413`
-- [ ] Uploaded files are parsed strictly in memory and **never written to disk**
-      (working copies are stored as parsed JSON rows in the DB `working_copies`
-      table; downloads are streamed from memory)
+- [ ] Uploaded data files are parsed strictly in memory and **never stored on
+      server disk or persisted as files**; exports are filled from PostgreSQL
+      into the empty template in memory and streamed directly to the client
+- [ ] Empty Excel templates uploaded by admins (`PUT /api/admin/excel-template`)
+      are stored as `LargeBinary` in the database (`excel_templates`), must pass
+      a schema check and contain **zero case data rows / PII**, and are logged
+      in `admin_audit_log` (spec 009); VBA macros are never executed on the
+      server
 - [ ] Client-supplied filenames are never used in any server-side filesystem
       operation
 - [ ] Backup archive downloads (`POST /api/admin/backups/:filename/download`,

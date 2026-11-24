@@ -13,8 +13,8 @@ See [`AGENTS.md`](../../AGENTS.md) and [`.indaba/artifacts/resolve_n01_n24.trans
   - Any request attempting to fetch, modify, or archive a case that either does not exist or lies outside the caller's authorized visibility scope returns `404 Not Found`. `403 Forbidden` is reserved exclusively for role-gated administrative endpoints or unauthorized field modifications (e.g. non-admin attempting to set `deadline`). Resource existence is never leaked.
 - **Supervisor Hierarchy Boundary (N-03):**
   - Supervisor scoping is non-transitive: supervisors can view and edit their own cases and direct subordinates' cases only (`assigned_to IN (self, direct_subordinates)`). No multi-level hierarchy or transitive team inheritance exists.
-- **In-Memory Excel Processing Seam (N-01):**
-  - The Excel import and export pipelines operate strictly in memory. Uploaded workbooks are parsed into structured JSON and stored in the database `working_copies` table; generated `.xlsx` exports are streamed via memory buffers. The server filesystem is completely bypassed.
+- **In-Memory Excel Processing Seam (spec 004):**
+  - The Excel import and export pipelines operate strictly in memory. Uploaded data workbooks are parsed in memory and never stored; admin-managed empty `.xlsx`/`.xlsm` templates live in `excel_templates` (schema-checked, zero PII) and are filled from PostgreSQL and streamed via memory buffers on export. The server filesystem is completely bypassed.
 - **Skill Encapsulation:**
   - 9 domain-specific skills in `.agents/skills/` (`architect`, `security-guard`, `rbac-cases`, `excel-pipeline`, `migrations`, `styling-design-system`, `accessibility`, `qa-testing`, `debugger`) cleanly isolate system invariants, rules, and verification checklists.
 
@@ -45,7 +45,7 @@ See [`AGENTS.md`](../../AGENTS.md) and [`.indaba/artifacts/resolve_n01_n24.trans
   - Added `version: int` (default `1`) to `cases` table for optimistic locking.
   - Removed `cases.note` column (N-10); notes are now managed exclusively via the immutable `case_notes` table (spec 010).
   - Removed `notifications_sound` from user settings and specifications (N-19).
-  - Added `working_copies` table (spec 004) and `automated_backups` table (spec 017).
+  - Added `excel_templates` table (spec 004) and `automated_backups` table (spec 017).
 - **JWT Surface Minimization (N-20):**
   - The JWT payload is restricted to `sub` (email) and standard expiration claims (`exp`). Role, active status, and password change flags are queried on every request.
 

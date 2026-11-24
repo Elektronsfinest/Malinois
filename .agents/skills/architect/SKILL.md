@@ -32,7 +32,7 @@ backend thin at the router layer and enforce invariants in one place.
 2. **Single Database (`DB2? = No`):**
    - One PostgreSQL (production) / SQLite (`dev.db`) database holds all 11
      tables: `users`, `cases`, `case_notes`, `case_edit_log`,
-     `case_assignment_history`, `notification_dismissals`, `working_copies`,
+     `case_assignment_history`, `notification_dismissals`, `excel_templates`,
      `system_settings`, `login_audit_log`, `admin_audit_log`, `backup_logs`.
 3. **Pagination & Summary Contracts:**
    - `GET /api/cases` ALWAYS returns `{ items, total, page, page_size }`
@@ -53,7 +53,7 @@ backend thin at the router layer and enforce invariants in one place.
    - `/login` — public (redirects authenticated users to `/`)
    - `/` — **Dashboard** (`spec 014`)
    - `/cases` — **Main Case Table & Edytor wstępny** (`spec 003`, `013`, `015`)
-   - `/import` — **Full Excel Copy Editor** (`spec 004`, reached from `/cases`)
+   - `/import` — **Excel Data Import** (`spec 004`, `admin` only, reached from `/cases`)
    - `/archive` — **Case Archive** (`spec 006`)
    - `/settings` — **User Settings & Accessibility** (`spec 008`)
    - `/admin` — **Admin Panel** (`spec 012`, 4 tabs: Users, Settings, Audit Log,

@@ -3,9 +3,11 @@
 > **Authoritative Spec Index** — All 24 specification inconsistencies (**N-01 – N-24**)
 > from `malinois-niespojnosci-specyfikacji.pdf` were resolved by consensus in the
 > Indaba council ([resolve_n01_n24.transcript.md](../.indaba/artifacts/resolve_n01_n24.transcript.md)).
-> Current architecture source of truth: `appbuild.drawio.xml` (non-local server,
-> single DB, full Excel copy editor, preliminary editor + person/case notes,
-> deadline notifications, archive, user accessibility settings).
+> Current architecture source of truth: `appbuild.drawio.xml` + owner update
+> (non-local server, single DB, direct PostgreSQL editing, admin-managed empty
+> Excel template with schema check for macro/pivot-preserving exports,
+> preliminary editor + person/case notes, deadline notifications, archive, user
+> accessibility settings).
 
 ---
 
@@ -26,7 +28,7 @@
 | [001](001-auth/spec.md) | `auth` | ✅ Done | — | `/login`, `POST /api/login`, `GET /api/me`, `GET /health` |
 | [002](002-roles-and-permissions/spec.md) | `roles-and-permissions` | 📋 Spec (Resolved) | 001 | `GET/POST /api/admin/users`, `PATCH /api/admin/users/:id` |
 | [003](003-case-management/spec.md) | `case-management` | 📋 Spec (Resolved) | 002 | `/cases`, `GET/POST /api/cases`, `GET/PATCH /api/cases/:id` |
-| [004](004-excel-import/spec.md) | `excel-import` | 📋 Spec (Resolved — pending business Excel sample) | 003, 007, 009, 010, 011, 017 | `/import`, `/api/import/copies/*` |
+| [004](004-excel-import/spec.md) | `excel-import` | 📋 Spec (Resolved — pending business Excel sample) | 003, 007, 009, 010, 011, 017 | `/import`, `/api/import/*`, `/api/cases/export`, `/api/admin/excel-template` |
 | [005](005-notifications/spec.md) | `notifications` | 📋 Spec (Resolved) | 003, 012 | `GET /api/notifications`, `POST /api/notifications/:case_id/dismiss` |
 | [006](006-archive/spec.md) | `archive` | 📋 Spec (Resolved) | 003, 005, 009, 011, 016 | `/archive`, `POST /api/cases/:id/archive`, `POST /api/cases/:id/restore` |
 | [007](007-security/spec.md) | `security` | 📋 Spec (Resolved) | 001, 002 | Cross-cutting; `POST /api/admin/users/:id/reset-password` |
@@ -49,8 +51,8 @@
 |---|---|---|
 | `/login` | Login | Public (redirects authenticated users to `/`) |
 | `/` | **Dashboard** (`spec 014`) | Authenticated (landing page after login) |
-| `/cases` | **Main Case Table & Edytor wstępny** (`spec 003`, `013`, `015`) | Authenticated (includes `"Import / Edytor pliku"` button → `/import`) |
-| `/import` | **Full Excel Copy Editor** (`spec 004`) | Authenticated (upload is `admin`-only; live snapshot & `.xlsx` download for all roles) |
+| `/cases` | **Main Case Table & Edytor wstępny** (`spec 003`, `013`, `015`) | Authenticated (includes `"Pobierz Excel"` export button; `"Import Excel"` button for `admin` → `/import`) |
+| `/import` | **Excel Data Import** (`spec 004`) | `admin` only (non-admins redirected to `/`) |
 | `/archive` | **Case Archive** (`spec 006`) | Authenticated (`Przywróć` restricted to `supervisor` & `admin`) |
 | `/settings` | **User Settings & Accessibility** (`spec 008`) | Authenticated (forced redirect target when `must_change_password = true`) |
 | `/admin` | **Admin Panel** (`spec 012`) — 4 tabs: Users, Settings, Audit Log, Backups | `admin` only (non-admins redirected to `/`) |
@@ -69,7 +71,7 @@
 | **Archive Case** (single & bulk) | ✅ Own cases | ✅ Own + direct subordinates | ✅ All cases |
 | **Restore Case** (single & bulk) | ❌ `403` | ✅ Own + direct subordinates | ✅ All cases |
 | **Reassign Case** (`POST /api/cases/reassign`) | ❌ `403` | ✅ Within own + direct subordinates | ✅ Any active user |
-| **Excel Copy Editor (`/import`)** | Live snapshot copy + non-date edits + `.xlsx` download | Live snapshot copy + non-date edits + `.xlsx` download | Upload `.xlsx`/`.xls` + full edit + commit (with auto pre-import backup) |
+| **Excel Import / Export (`spec 004`)** | Role-scoped template-filled `.xlsx`/`.xlsm` export (`GET /api/cases/export`) | Role-scoped template-filled `.xlsx`/`.xlsm` export (`GET /api/cases/export`) | Import `.xlsx`/`.xlsm`/`.xls` preview & commit (auto pre-import backup) + manage empty template (`PUT /api/admin/excel-template`) |
 | **Admin Panel (`/admin`)** | ❌ Redirect / `403` | ❌ Redirect / `403` | ✅ Full access (4 tabs) |
 
 ---
@@ -80,5 +82,5 @@
 2. **Optimistic Locking (N-06):** Single unified case service layer; every mutation (`PATCH`, `archive`, `restore`, `bulk`, `reassign`, `import commit`) checks and increments `cases.version`, returning `409 Conflict` on mismatch with zero silent overwrites.
 3. **Pagination Contract (N-14):** `GET /api/cases` ALWAYS returns `{ items, total, page, page_size }`.
 4. **Timezone & Deadlines (N-15, N-16):** `Europe/Warsaw` timezone; `overdue` is strictly `deadline < today`; `due_soon` uses admin-configured `notification_threshold_days` (default `7`).
-5. **Single Database (N-23):** One PostgreSQL/SQLite DB holds all 11 tables: `users`, `cases`, `case_notes`, `case_edit_log`, `case_assignment_history`, `notification_dismissals`, `working_copies`, `system_settings`, `login_audit_log`, `admin_audit_log`, `backup_logs`.
-6. **Zero Disk Uploads (N-01):** Uploaded Excel files are parsed in memory into `working_copies.rows_json` (24h TTL, max 5/user) and downloaded `.xlsx` files are streamed from memory.
+5. **Single Database (N-23):** One PostgreSQL/SQLite DB holds all 11 tables: `users`, `cases`, `case_notes`, `case_edit_log`, `case_assignment_history`, `notification_dismissals`, `excel_templates`, `system_settings`, `login_audit_log`, `admin_audit_log`, `backup_logs`.
+6. **Zero Disk Uploads & Template-Based Export (spec 004):** No user-data Excel files are ever stored on disk or in DB. Imports are parsed strictly in memory; exports fill the admin-managed empty `.xlsx`/`.xlsm` template (`excel_templates`, schema-checked, zero PII) from PostgreSQL and stream directly from memory.
