@@ -1,0 +1,33 @@
+version: "1.0"
+name: "malinois-verify-specs"
+
+roles:
+  claude:
+    runner: "claude-code"
+  agy:
+    runner: ["acp", "antigravity"]
+    agent: "antigravity"
+
+steps:
+  - id: "verify_updated_specs"
+    role: "claude"
+    consensus_with: ["agy"]
+    decision_type: "consensus"
+    max_rounds: 3
+    goal: >-
+      Verify that the updated Malinois specifications under specs/ (001-auth through
+      017-automated-backups, plus specs/DEPENDENCY_MAP.md) and AGENTS.md faithfully and
+      consistently implement ALL 24 agreed resolutions from
+      .indaba/artifacts/resolve_n01_n24.transcript.md with ZERO remaining contradictions.
+      Spot-check key cross-spec contracts:
+      (1) GET /api/cases response shape ({items, total, page, page_size}) across 002, 003, 006, 013;
+      (2) 404 vs 403 policy across 002, 003, 005, 006, 007, 009, 010, 015, 016;
+      (3) version optimistic locking across 002, 003, 004, 006, 011, 015, 016;
+      (4) routes (/, /cases, /import, /archive, /settings, /admin) across 003, 004, 008, 012, 014, AGENTS.md;
+      (5) 12-char password policy & sub-only JWT across 002, 007, 008, 012;
+      (6) removal of cases.note & notifications_sound across 003, 008, 009, 010, 011;
+      (7) Admin Panel 4 tabs & pre-import backup + password-reverified download across 004, 009, 012, 017.
+      Do NOT modify any files. Keep your reply under 250 words.
+      If you find ANY remaining contradiction, broken link, or missed resolution, begin with
+      CRITIQUE: and list the exact file + issue. If all checks pass with zero contradictions,
+      begin with AGREEMENT: and state "VERIFIED: 0 contradictions found" with a brief checklist.

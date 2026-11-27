@@ -2,77 +2,88 @@
 
 ## Goal
 
-Replace the bare "Witaj, email!" placeholder with a meaningful landing page
-that gives each user an at-a-glance overview of their workload. Supervisors
-and admins see team-level summaries. Everyone lands here after login and
-immediately knows if something needs urgent attention.
+Replace the bare `"Witaj, email!"` placeholder at `/` with an actionable
+landing dashboard that gives each user an at-a-glance overview of their
+workload. Supervisors and admins see per-member team summaries via the single
+`GET /api/dashboard/summary` endpoint. Clicking any card or team row navigates
+to `/cases` with the corresponding filter pre-applied.
 
 ## User Stories
 
-- As a regular user, I want to see a summary of my open and overdue cases the
-  moment I log in so that I can prioritise without navigating anywhere.
-- As a supervisor, I want to see case counts per team member so that I can spot
-  who is overloaded or falling behind on deadlines.
+- As a regular user, I want to see a summary of my open, overdue, and due-soon
+  cases the moment I log in so that I can prioritise without navigating.
+- As a supervisor, I want to see case counts per direct subordinate (and my own
+  cases) so that I can spot who is overloaded or falling behind on deadlines.
 - As an admin, I want to see a system-wide summary (total cases, overdue,
-  recently closed) so that I can monitor the health of the whole operation.
-- As any user, I want to click a summary card to jump to the filtered case list
-  so that the dashboard is actionable, not just informational.
+  due-soon, last import timestamp) so that I can monitor the whole operation.
+- As any user, I want to click a summary card to jump to `/cases` with the
+  matching filter pre-applied so that the dashboard is actionable.
 
 ## Acceptance Criteria
 
 ### Backend
-- [ ] `GET /api/dashboard` returns summary stats scoped by the caller's role
+- [ ] `GET /api/dashboard/summary` is the single summary endpoint for Dashboard
+      and supervisor per-member totals (no duplicate `/api/cases/summary`)
+- [ ] All date boundaries use the `Europe/Warsaw` timezone and the admin-
+      configured `notification_threshold_days` (default `7`, spec 012)
 - [ ] Response for `user` role includes:
+  - `notification_threshold_days` — current global threshold
   - `open_cases` — count of their open, non-archived cases
-  - `overdue_cases` — count where `deadline < today` and `status = open`
-  - `due_this_week` — count where `deadline` is within the next 7 days and
-    `status = open`
+  - `overdue_cases` — count where `deadline < today_warsaw` (strictly past;
+    today's deadline is NOT overdue) and `status = open` and `archived = false`
+  - `due_soon` — count where `today_warsaw <= deadline <= today_warsaw +
+    notification_threshold_days` and `status = open` and `archived = false`
   - `closed_this_month` — count closed in the current calendar month
-- [ ] Response for `supervisor` role includes the above plus:
-  - `team_summary` — array of `{ user_id, email, open_cases, overdue_cases }`
-    for each direct subordinate
-- [ ] Response for `admin` role includes the above (team_summary = all users)
-  plus:
+    (`Europe/Warsaw`)
+- [ ] Response for `supervisor` role includes the above (scoped to own +
+      direct subordinates' cases) plus:
+  - `team_summary` — array of `{ user_id, email, open_cases, overdue_cases,
+    due_soon }` for the supervisor and each direct subordinate
+- [ ] Response for `admin` role includes the above (`team_summary` = all active
+      users) plus:
   - `total_cases` — total non-archived cases in the system
-  - `import_last_at` — timestamp of the last successful Excel import
-    (nullable)
-- [ ] The endpoint uses a single efficient query (or a small fixed number of
-      queries) — no N+1 per user
+  - `import_last_at` — ISO 8601 UTC timestamp of the last committed Excel copy
+    (nullable, read from `system_settings["last_import_at"]`)
+- [ ] Uses a small fixed number of SQL aggregate queries — no N+1 per user
 
 ### Frontend
-- [ ] The Dashboard (`/`) shows stat cards:
-  - "Otwarte sprawy" with the count
-  - "Zaległe" (overdue) with the count — card is red if count > 0
-  - "Termin w tym tygodniu" with the count — card is orange if count > 0
-  - "Zamknięte w tym miesiącu" with the count
-- [ ] Clicking any card navigates to `/` (Main) with the corresponding filter
-      pre-applied (e.g. clicking "Zaległe" sets `deadline_to=today&status=open`)
-- [ ] Supervisors see an additional "Mój zespół" table below the cards showing
-      one row per team member with their open and overdue counts; clicking a
-      row jumps to the case list filtered by that user
-- [ ] Admins see the supervisor view plus "Ostatni import" timestamp
-- [ ] Stats refresh automatically every 5 minutes while the user is on the page
-- [ ] Loading state: skeleton placeholders are shown while the API call is in
-      flight; no blank flash
+- [ ] Dashboard lives at `/` (login redirects to `/`); Main case table lives
+      at `/cases`
+- [ ] Renders stat cards styled with Malinois dark-blue glassmorphism:
+  - **"Otwarte sprawy"** → clicks through to `/cases?status=open`
+  - **"Zaległe"** (red accent `#ef4444` when > 0) → clicks through to
+    `/cases?overdue=true&status=open`
+  - **"Zbliżający się termin (≤ X dni)"** (orange accent `#f59e0b` when > 0,
+    where `X = notification_threshold_days`) → clicks through to
+    `/cases?due_soon=true&status=open`
+  - **"Zamknięte w tym miesiącu"** → clicks through to `/cases?status=closed`
+- [ ] Supervisors see a **"Mój zespół"** table below the cards (one row per
+      member with open, overdue, and due-soon counts); clicking a row navigates
+      to `/cases?assigned_to=<user_id>`
+- [ ] Admins see the team table plus **"Ostatni import"** timestamp (Polish
+      locale `DD.MM.YYYY, HH:mm`)
+- [ ] Stats auto-refresh every 5 minutes while the page is open
+- [ ] Loading state renders glassmorphic skeleton placeholders (no blank flash)
 
 ## Out of Scope
 
 - Historical charts or trend graphs (future enhancement)
-- Real-time push updates (polling every 5 min is sufficient)
-- Per-case type breakdowns (cases are not categorised in this version)
+- Real-time WebSocket push updates (5-minute polling is sufficient)
+- Per-case type breakdowns
 
 ## API Contract
 
-### `GET /api/dashboard`
+### `GET /api/dashboard/summary`
 
 **Headers:** `Authorization: Bearer <jwt>`
 
 **200 OK — user role**
 ```json
 {
+  "notification_threshold_days": 7,
   "open_cases": 12,
   "overdue_cases": 2,
-  "due_this_week": 4,
+  "due_soon": 4,
   "closed_this_month": 5
 }
 ```
@@ -80,13 +91,15 @@ immediately knows if something needs urgent attention.
 **200 OK — supervisor role**
 ```json
 {
-  "open_cases": 3,
-  "overdue_cases": 0,
-  "due_this_week": 1,
-  "closed_this_month": 2,
+  "notification_threshold_days": 7,
+  "open_cases": 12,
+  "overdue_cases": 2,
+  "due_soon": 3,
+  "closed_this_month": 6,
   "team_summary": [
-    { "user_id": 4, "email": "anna@example.com", "open_cases": 7, "overdue_cases": 2 },
-    { "user_id": 5, "email": "piotr@example.com", "open_cases": 2, "overdue_cases": 0 }
+    { "user_id": 2, "email": "supervisor@example.com", "open_cases": 3, "overdue_cases": 0, "due_soon": 1 },
+    { "user_id": 4, "email": "anna@example.com", "open_cases": 7, "overdue_cases": 2, "due_soon": 2 },
+    { "user_id": 5, "email": "piotr@example.com", "open_cases": 2, "overdue_cases": 0, "due_soon": 0 }
   ]
 }
 ```
@@ -94,24 +107,24 @@ immediately knows if something needs urgent attention.
 **200 OK — admin role**
 ```json
 {
-  "open_cases": 0,
-  "overdue_cases": 0,
-  "due_this_week": 0,
-  "closed_this_month": 1,
+  "notification_threshold_days": 7,
+  "open_cases": 80,
+  "overdue_cases": 5,
+  "due_soon": 14,
+  "closed_this_month": 21,
   "total_cases": 134,
   "import_last_at": "2027-01-14T08:00:00Z",
-  "team_summary": [ ]
+  "team_summary": []
 }
 ```
 
 ## Data Model Changes
 
-No new tables. `import_last_at` can be derived from the `system_settings` table
-(spec 012) with a key `last_import_at` updated after each successful import.
+No new tables. Reads `cases`, `users`, and `system_settings` (`notification_threshold_days`, `last_import_at`).
 
-## Open Questions
+## Resolved Decisions (Indaba Council)
 
-- [ ] Should "Zaległe" include cases where `deadline = today` or only
-      `deadline < today`? → Strictly past (`deadline < today`).
-- [ ] Should the dashboard show a list of the top 5 most urgent cases below the
-      cards? → Nice to have; defer to a follow-up iteration.
+- Dashboard at `/`, Main case table at `/cases`, login redirects to `/` (N-15).
+- Single summary endpoint `GET /api/dashboard/summary` replaces any duplicate cases summary endpoint (N-14).
+- `due_this_week` replaced by `due_soon` driven by `notification_threshold_days` (N-15).
+- "Zaległe" is strictly `deadline < today` (`Europe/Warsaw`) and links to `/cases?overdue=true&status=open` (N-16).

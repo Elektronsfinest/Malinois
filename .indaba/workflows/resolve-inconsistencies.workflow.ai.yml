@@ -1,0 +1,58 @@
+version: "1.0"
+name: "malinois-resolve-inconsistencies"
+
+roles:
+  claude:
+    runner: "claude-code"
+  agy:
+    runner: "antigravity"
+
+steps:
+  - id: "resolve_n01_n24"
+    role: "claude"
+    consensus_with: ["agy"]
+    decision_type: "consensus"
+    max_rounds: 4
+    goal: >-
+      We are finalizing the full specifications for Malinois (ZUS case-management web app;
+      stack: FastAPI, SQLAlchemy 2.0, Alembic, PostgreSQL/SQLite, PyJWT, bcrypt; React 19,
+      TypeScript, Vite, TanStack Router; dark-blue glassmorphic UI).
+      Current architecture source of truth: appbuild.drawio.xml (non-local server, Login, Main +
+      Edytor wstępny + notatka do osoby/sprawy, Edytor całego pliku Excel działający na kopiach
+      i pobieranie na komputer, Powiadomienia, Archiwum, Ustawienia użytkownika z accessibility,
+      DB). Older draft: zus-sprawy.drawio (roles, concurrent editing, no date editing except admin,
+      popup alerts).
+      Do NOT edit any files and do NOT run shell commands.
+      Propose and agree on a SINGLE concrete, unambiguous architectural resolution for EVERY item
+      N-01 through N-24 from the inconsistency audit so the specs can be updated with zero
+      contradictions:
+      N-01: Full Excel Copy Editor (appbuild) vs spec 004 in-memory import/export & 007 no-disk rule.
+      N-02: Password changes (self-service 008 vs "tylko admin?" in appbuild) & missing accessibility settings (font size, high contrast, reduced motion).
+      N-03: Supervisor visibility scope (subordinates only in 002 vs own + subordinates in AGENTS/014-016) + editable fields list for supervisor vs user.
+      N-04: Bulk restore in 015 allowed for regular user vs forbidden in 006 & appbuild.
+      N-05: 403 vs 404 for cases outside user scope (007 bans 404 vs 002/003/005 require 404).
+      N-06: Optimistic locking (`version` in 011) bypassed by import (004), archive/restore (006), bulk (015), reassign (016), and missing from 002/003 PATCH examples.
+      N-07: Non-admin writing dates on case creation (003 lets supervisor POST with deadline vs AGENTS/007 "only admin writes dates") + admin date edit reason.
+      N-08: Past deadlines rejected on creation (003) vs imported/overdue cases (004/005) + native Excel date cells vs Polish text dates.
+      N-09: Single assignee (`assigned_to`) vs "wielu użytkowników" in notifications & Excel duplicate row conflict handling.
+      N-10: Note "do osoby" (appbuild/010) vs only `case_id`, AND duplicate `cases.note` column (003) vs immutable `case_notes` (010).
+      N-11: Permanent notification dismissal `(user_id, case_id)` vs deadline change / upcoming->overdue / archive-restore, plus "oprócz edycji?" and popup channels.
+      N-12: Bulk operations excluded in Out of Scope of 003/006 but introduced in 015/016.
+      N-13: Archive visibility "spraw w których użytkownik był przypisany" (appbuild) vs current `assigned_to` after reassignment (016).
+      N-14: GET /api/cases response shape (paginated object in 013 vs array in 002/003/006) & supervisor per-member totals.
+      N-15: Route collision `/` for both Dashboard and Main (014 vs AGENTS.md) & hardcoded 7-day colour/due_this_week vs admin notification_threshold_days.
+      N-16: "Zaległe" filter (`deadline < today` vs link `deadline_to=today` which is `<=`).
+      N-17: 60-min JWT vs inactivity/immediate deactivation (`routers/auth.py` already checks `is_active` on every request!) + 011 no-silent-data-loss on 401.
+      N-18: Password policy mismatch (8 chars in 008 vs 12 chars in 007) & `must_change_password` on initial user creation (002/012).
+      N-19: `notifications_sound` in 008 story/example vs excluded in 008 Out of Scope.
+      N-20: Role claim in JWT (002) vs sub-only JWT in `security.py` / AGENTS.md (role loaded from DB).
+      N-21: Admin Panel tab count (3 in 012 vs 4th Backups tab in 017) & Import/Editor navigation.
+      N-22: Broken spec cross-references (002->006-audit-log, 003->005-archive & 004 inline editor) & admin permission audit log.
+      N-23: Scope of specs 013-017 vs diagrams, DB2? question (single DB vs two DBs), backup download security & pre-import backup.
+      N-24: Deactivating a user or supervisor: handling orphaned cases and subordinates.
+
+      Format your response as a concise numbered list N-01 through N-24 (1-2 crisp sentences each).
+      In Round 1 begin with CRITIQUE: and state your complete proposed resolutions for N-01..N-24.
+      In subsequent rounds, if you accept the other agent's resolutions (with or without minor agreed
+      tweaks already incorporated), begin with AGREEMENT: and output the final agreed N-01..N-24 list;
+      otherwise begin with CRITIQUE: and address only the specific N-xx items you disagree on.
