@@ -16,7 +16,7 @@ session-expiry drafts are preserved in `sessionStorage`.
 - As a user, I want to see what the other person changed so that I can decide
   whether to keep my version, their version, or merge manually.
 - As a supervisor or admin running bulk actions, archive/restore, reassignment,
-  or an Excel copy commit, I want stale versions to be detected per row so that
+  or an Excel import commit, I want stale versions to be detected per row so that
   concurrent edits are never silently clobbered.
 - As a user whose 60-minute session expires while editing a form, I want my
   unsaved changes preserved across re-login so that I never lose work silently.
@@ -33,9 +33,9 @@ session-expiry drafts are preserved in `sessionStorage`.
     inside a DB transaction, atomically increment `version = version + 1`, and
     return `409 Conflict` with the latest `current` case object on mismatch
   - Bulk operations (`POST /api/cases/bulk`, spec 015), reassignment
-    (`POST /api/cases/reassign`, spec 016), and Excel copy commits
-    (`POST /api/import/copies/:id/commit`, spec 004) MUST supply per-row
-    `{ id, version }` from the UI selection or working copy, verify and
+    (`POST /api/cases/reassign`, spec 016), and Excel import commits
+    (`POST /api/import/commit`, spec 004) MUST supply per-row
+    `{ id, version }` from the UI selection or import preview, verify and
     increment `version` on each row, and report per-row `409` conflicts without
     silent overwrites
 - [ ] `GET /api/cases` and `GET /api/cases/:id` always return `version` on
@@ -116,5 +116,5 @@ Add to `cases` table:
 
 ## Resolved Decisions (Indaba Council)
 
-- All case mutations (PATCH, archive, restore, bulk, reassign, Excel copy commit) enforce and increment `version` through one service layer with no silent overwrites (N-06).
+- All case mutations (PATCH, archive, restore, bulk, reassign, Excel import commit) enforce and increment `version` through one service layer with no silent overwrites (N-06).
 - On `401` during editing, unsaved drafts are saved to `sessionStorage` and restored via a re-login modal, clearing on explicit logout or user switch (N-17).

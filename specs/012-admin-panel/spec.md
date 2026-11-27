@@ -3,11 +3,11 @@
 ## Goal
 
 Give administrators a dedicated UI (`/admin`) for managing users, assigning
-roles and supervisors, resetting passwords, configuring system settings,
-inspecting the admin audit log, and managing database backups. All admin
-endpoints are secured with `require_role("admin")` (spec 002, spec 007).
-Excel import & full copy editing live separately at `/import` (reached from
-`/cases`, spec 004).
+roles and supervisors, resetting passwords, configuring system settings and the
+empty Excel export template, inspecting the admin audit log, and managing
+database backups. All admin endpoints are secured with `require_role("admin")`
+(spec 002, spec 007). Excel data import lives separately at `/import` (reached
+from `/cases`, spec 004).
 
 ## User Stories
 
@@ -52,6 +52,9 @@ Excel import & full copy editing live separately at `/import` (reached from
 - [ ] `GET /api/admin/settings` and `PATCH /api/admin/settings` manage
       `notification_threshold_days` (integer `1–365`, default `7`), logging
       `settings_updated` in `admin_audit_log`
+- [ ] `GET /api/admin/excel-template` and `PUT /api/admin/excel-template`
+      (spec 004) allow admins to inspect and upload/replace the empty `.xlsx` /
+      `.xlsm` export template with mandatory schema validation and audit logging
 
 ### Frontend
 - [ ] The Admin Panel lives at `/admin`, accessible only when `role = admin`;
@@ -74,6 +77,9 @@ Excel import & full copy editing live separately at `/import` (reached from
   - Editable `notification_threshold_days` (1–365); changes take effect
     immediately across notifications (005), case row urgency colours (003), and
     Dashboard `due_soon` (014)
+  - **Szablon Excel (.xlsx / .xlsm)** section (spec 004): displays active
+    template metadata and allows admins to upload/replace the empty export
+    template with schema-check feedback
 - [ ] **Dziennik audytu tab:**
   - Displays paginated `admin_audit_log` entries (spec 009) with action filter
 - [ ] **Kopie zapasowe tab:**
@@ -83,9 +89,10 @@ Excel import & full copy editing live separately at `/import` (reached from
 ## Out of Scope
 
 - Bulk user import from CSV / Excel
-- Excel case import / copy editing (lives at `/import`, reached from `/cases`
-  per spec 004)
-- System configuration beyond `notification_threshold_days`
+- Excel case data import (lives at `/import`, reached from `/cases` per spec
+  004)
+- System configuration beyond `notification_threshold_days` and the Excel
+  export template
 
 ## API Contract
 
@@ -128,7 +135,7 @@ Seed row: `{ key: "notification_threshold_days", value: "7" }`.
 
 ## Resolved Decisions (Indaba Council)
 
-- Admin Panel has 4 tabs: Users, Settings, Audit Log, Backups; Import / Full Excel Copy Editor lives at `/import` reached from `/cases` (N-21).
+- Admin Panel has 4 tabs: Users, Settings (including empty Excel template upload with schema check), Audit Log, Backups; Excel data import lives at `/import` reached from `/cases` (N-21, spec 004).
 - Admin user creation enforces 12-char password policy and sets `must_change_password = true` (N-18).
 - All admin permission changes are logged in `admin_audit_log` (N-22).
 - User/supervisor deactivation requires explicit `reassign_cases_to` / `reassign_subordinates_to` with `409 Conflict` when omitted (N-24).

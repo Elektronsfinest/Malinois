@@ -33,7 +33,7 @@ No task in `specs/<NNN>/tasks.md` is complete until its tests exist and pass.
    - `user` (own resource vs someone else's resource)
    - `supervisor` (own + direct subordinate vs other team's resource)
    - `admin` (all resources)
-3. **Test Date Immutability:** Verify `user` and `supervisor` receive `403` when attempting to modify `deadline` or `date_filed` via `PATCH`, bulk, or Excel copy editor.
+3. **Test Date Immutability:** Verify `user` and `supervisor` receive `403` when attempting to modify `deadline` or `date_filed` via `PATCH`, bulk, or Excel import endpoints.
 4. **Test Concurrency (`version`):** Verify stale `version` returns `409 Conflict` with the latest `current` case payload and does not overwrite DB state.
 5. **Test Atomicity:** For bulk operations and reassignments, verify that a single unauthorized or missing ID rolls back the entire transaction.
 6. **Never hardcode production secrets or external DB URLs** in tests; use the seeded/fixture SQLite DB. Default seeded test account: `trainee@example.com` / `Secret123!`.

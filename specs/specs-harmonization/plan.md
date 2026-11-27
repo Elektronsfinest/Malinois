@@ -15,7 +15,7 @@ Implementation plan derived from [Elektronsfinest/Malinois#5](https://github.com
 | `.indaba/workflows/*` | Automated debate workflows: `resolve-inconsistencies.workflow.ai.yml` and `verify-specs.workflow.ai.yml` |
 | `specs/002-roles-and-permissions/spec.md` | Non-transitive supervisor scope (own + direct subordinates); `404` for out-of-scope; `sub`-only JWT; admin-only dates |
 | `specs/003-case-management/spec.md` | Removed legacy `cases.note`; added `version` integer locking; standardized `GET /api/cases` response `{items, total, page, page_size}` |
-| `specs/004-excel-import/spec.md` | Server-side `working_copies` DB table (no disk storage); Polish date formats (`DD.MM.YYYY`); mandatory pre-import snapshot; streaming export |
+| `specs/004-excel-import/spec.md` | Direct PostgreSQL editing + admin-managed empty `.xlsx`/`.xlsm` template (`excel_templates`, schema-checked, preserves macros/pivots); in-memory import preview/commit with Polish dates (`DD.MM.YYYY`); mandatory pre-import snapshot; streaming template-filled export |
 | `specs/005-notifications/spec.md` | Notification dismissal lifecycle keyed on `(user_id, case_id, deadline_snapshot, state)`; removed `notifications_sound`; multi-user supervisor alerts |
 | `specs/006-archive/spec.md` | Restore restricted to supervisor/admin; archive visibility includes historical assignees (`case_assignment_history`); `404` for out-of-scope |
 | `specs/007-security/spec.md` | Unified 12-char password policy; bcrypt cost `>= 12`; `sub`-only 60-min JWT; strict `404` vs `403` anti-enumeration; zero temporary files on disk |
@@ -60,16 +60,16 @@ flowchart TD
         Mutation --> CasesTable[("cases")]
         Mutation --> NotesTable[("case_notes (Immutable)")]
         Mutation --> HistoryTable[("case_assignment_history & edit_log")]
-        Mutation --> CopiesTable[("working_copies (Excel JSON, 24h TTL)")]
+        Mutation --> TemplatesTable[("excel_templates (Empty .xlsx/.xlsm, zero PII)")]
         Mutation --> BackupsTable[("automated_backups & snapshots")]
     end
 
     subgraph ExcelFlow ["Excel Pipeline (Zero Disk I/O)"]
-        Client -->|"Upload .xlsx in-memory"| ParseStream["In-Memory Parser (Polish + ISO dates)"]
-        ParseStream --> CopiesTable
-        CopiesTable -->|"Explicit Commit"| CaseService
+        Client -->|"Upload .xlsx/.xlsm in-memory"| ParseStream["In-Memory Parser (Polish + ISO dates)"]
+        ParseStream -->|"Explicit Commit"| CaseService
         CaseService -->|"Pre-import Snapshot"| BackupsTable
-        CaseService -->|"Export Request"| MemoryStream["In-Memory Streaming XLSX"]
+        TemplatesTable -->|"Fill from PostgreSQL in memory"| MemoryStream["In-Memory Streaming XLSX/XLSM"]
+        CaseService -->|"Export Request"| MemoryStream
         MemoryStream --> Client
     end
 ```
@@ -93,7 +93,8 @@ flowchart TD
   - Supervisors see their own cases and direct subordinates' cases (`assigned_to IN (self, subordinates)`) with zero transitive inheritance.
 
 - **Excel In-Memory Pipeline (`apps/api/services/excel.py`):**
-  - Uploaded workbooks are parsed entirely in memory and persisted as structured JSON rows in the `working_copies` table (max 5 copies per user, 24h TTL). No temporary or permanent files touch the server disk.
+  - Uploaded data workbooks are parsed strictly in memory and never stored on server disk or in the database; all live edits happen directly in PostgreSQL (`cases`) with optimistic locking (`version`).
+  - Admins manage an empty `.xlsx`/`.xlsm` export template in `excel_templates` (validated by a mandatory schema check and zero-PII check) so downloads preserve business macros, pivot tables, and formatting.
   - Handles Polish date formats (`DD.MM.YYYY`, `DD-MM-YYYY`) and ISO dates.
   - Commits trigger an automatic `pre_import` snapshot in `automated_backups`.
 
@@ -106,8 +107,8 @@ flowchart TD
 
 ## 4. Trade-offs taken
 
-- **Server-side `working_copies` in DB vs. Filesystem Storage (N-01):**
-  - Storing parsed Excel data as JSON in `working_copies` keeps the server stateless, eliminates disk file lifecycle/permissions bugs, and honors the strict zero-disk security mandate. Cost: Slightly higher database storage during active preview sessions (mitigated by 24h TTL and 5-copy limit).
+- **Direct PostgreSQL Editing + Empty Template Storage vs. Disk Files (spec 004):**
+  - Storing only the admin-uploaded empty `.xlsx`/`.xlsm` template in `excel_templates` (zero PII, schema-checked) and populating it from PostgreSQL in memory on export preserves business macros/pivots while keeping the server stateless and honoring the strict zero-disk mandate. No user-data Excel files are ever stored on the server.
 - **Optimistic Locking via `version` vs. Pessimistic / WebSocket Locks (N-06, N-11):**
   - Optimistic locking avoids lock-abandonment issues when users close tabs without saving. Stale saves yield an accessible `409` diff modal with "Twoja wersja" vs. "Zapisana wersja". Cost: Users who concurrently edit the same case must manually resolve collisions.
 - **`sub`-Only JWT vs. Self-Contained JWT (N-20):**
@@ -144,8 +145,8 @@ flowchart TD
 
 5. **Excel Pipeline & Backups (Specs 004, 017):**
    - In-memory Excel parsing with Polish date format resilience.
-   - `working_copies` table, preview API, and commit flow with automatic pre-import backup.
-   - Streaming in-memory `.xlsx` export.
+   - `excel_templates` table with admin upload/replace + schema check, import preview/commit flow with automatic pre-import backup.
+   - Streaming in-memory template-filled `.xlsx`/`.xlsm` export.
 
 6. **Bulk Operations, Reassignment & Archive (Specs 005, 006, 015, 016):**
    - Bulk status updates, bulk archive, and supervisor/admin bulk restore.
@@ -165,7 +166,7 @@ flowchart TD
 | **Silent data loss during concurrent saves** | Mandatory `version` column checked in single service layer; `409 Conflict` returns latest `current` case for side-by-side diff modal. |
 | **Information leakage via case ID guessing** | Strict `404 Not Found` returned whenever a case is missing OR outside caller's RBAC scope. |
 | **Malformed Excel dates corrupting deadlines** | Multi-format parser handles native Excel floats and Polish text strings (`DD.MM.YYYY`); non-admin import rejects date modifications; preview flags invalid rows. |
-| **Disk fill / temporary file leakage** | Entire Excel pipeline operates in memory (streaming parser and generator) and database (`working_copies` table with 24h TTL). Zero files on disk. |
+| **Disk fill / temporary file leakage** | Entire Excel pipeline operates in memory (streaming parser and template-filled generator); only the empty template lives in `excel_templates`. Zero files on disk. |
 | **Orphaned cases on user deactivation** | `PATCH /api/admin/users/:id` requires `reassign_cases_to` if the user owns active cases, returning `409` if omitted. |
 | **Form loss on 60-minute token expiration** | TanStack Router / Axios interceptor catches `401`, preserves form state to `sessionStorage`, and presents inline re-login modal. |
 | **Accessibility regression on high-contrast/scale** | `accessibility` skill enforces WCAG 2.1 AA rules, pure `rem` typography, and CSS variables; verified in automated component tests. |

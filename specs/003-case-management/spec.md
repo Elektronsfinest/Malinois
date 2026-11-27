@@ -77,8 +77,9 @@ the primary working table of the application and reflects each user's role
 
 ### Frontend
 - [ ] Main case list lives at `/cases` (Dashboard lives at `/`, spec 014)
-- [ ] The `/cases` header includes an **"Import / Edytor pliku"** button routing
-      to `/import` (Full Excel Copy Editor, spec 004)
+- [ ] The `/cases` header includes a **"Pobierz Excel"** button (all roles,
+      calls `GET /api/cases/export`) and an **"Import Excel"** button (`admin`
+      only, routing to `/import`, spec 004)
 - [ ] The table renders columns: checkbox (spec 015), case number, title,
       client, assigned to (supervisor/admin view), deadline (Polish format
       `DD.MM.YYYY`), status

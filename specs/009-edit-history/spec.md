@@ -24,7 +24,7 @@ who changed what, when, and why.
 
 ### Backend — Case Edit Log
 - [ ] Every case mutation (`PATCH /api/cases/:id`, archive/restore, bulk
-      actions, reassignment, Excel copy commit) appends one row per changed
+      actions, reassignment, Excel import commit) appends one row per changed
       field to `case_edit_log`
 - [ ] Each row stores: `case_id`, `user_id`, `field_name`, `old_value`
       (string), `new_value` (string), `reason` (nullable string; **required**
@@ -39,7 +39,7 @@ who changed what, when, and why.
 - [ ] Archiving and restoring create a log entry with `field_name = "archived"`
       and values `"false" → "true"` / `"true" → "false"`
 - [ ] Reassignment creates a log entry with `field_name = "assigned_to"`
-- [ ] Excel copy commits (spec 004) log field-level changes for every updated
+- [ ] Excel import commits (spec 004) log field-level changes for every updated
       case row
 
 ### Backend — Admin Audit Log
@@ -47,7 +47,7 @@ who changed what, when, and why.
       and permission actions:
   - `user_created`, `role_changed`, `supervisor_changed`, `user_activated`,
     `user_deactivated`, `password_reset`, `settings_updated`,
-    `backup_downloaded`
+    `excel_template_updated`, `backup_downloaded`
 - [ ] `GET /api/admin/audit-log` (`admin` only; `403` for others) returns
       paginated `{ items, total, page, page_size }` ordered newest first, with
       optional `?action=` and `?target_user_id=` filters

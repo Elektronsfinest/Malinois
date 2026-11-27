@@ -3,7 +3,7 @@
 ## Goal
 
 Protect the **single** Malinois database (users, active & archived cases,
-working copies, notes, edit history, and audit logs — confirming `DB2? = No`)
+excel templates, notes, edit history, and audit logs — confirming `DB2? = No`)
 against data corruption, bad imports, or infrastructure failure. Provides
 scheduled nightly backups, **mandatory automatic pre-import snapshots** (spec
 004), on-demand manual snapshots, and password-reverified, audit-logged admin
@@ -13,7 +13,7 @@ downloads.
 
 - As an admin, I want automated daily database backups so that the system can
   be restored quickly without data loss in the event of an outage.
-- As an admin, I want an automatic snapshot taken before every Excel copy
+- As an admin, I want an automatic snapshot taken before every Excel import
   commit so that any bad bulk import has an immediate clean restore point.
 - As an admin, I want to trigger a manual backup snapshot and inspect backup
   history (date, type, file size).
@@ -29,7 +29,7 @@ downloads.
 - [ ] Automated daily backup job runs at `02:00 UTC` and creates a compressed
       snapshot in the configured backup directory (`BACKUP_DIR`, default `/backups`)
 - [ ] **Automatic pre-import snapshot (N-23):** every
-      `POST /api/import/copies/:copy_id/commit` (spec 004) automatically creates
+      `POST /api/import/commit` (spec 004) automatically creates
       a snapshot with `backup_type = "pre_import"` before mutating live `cases`
 - [ ] `POST /api/admin/backups` triggers an immediate manual snapshot:
   - Generates `malinois_backup_YYYYMMDD_HHMMSS_<type>.sql.gz` (or `.sqlite.gz`
@@ -130,6 +130,6 @@ New table `backup_logs`:
 ## Resolved Decisions (Indaba Council)
 
 - Single database confirmed (`DB2? = No`) (N-23).
-- Mandatory automatic `pre_import` backup snapshot before every Excel copy commit (N-23).
+- Mandatory automatic `pre_import` backup snapshot before every Excel import commit (N-23).
 - Backup downloads require admin password re-verification and are logged in `admin_audit_log` (N-23).
 - Mounted as the 4th tab inside Admin Panel `/admin` (N-21).

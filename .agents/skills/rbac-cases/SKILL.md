@@ -36,7 +36,7 @@ Enforces the exact domain rules agreed for `specs/002`, `003`, `006`, `009`,
      verify inside a DB transaction, increment `version`, and return `409` with
      `current` on mismatch.
    - Bulk (`POST /api/cases/bulk`), reassignment (`POST /api/cases/reassign`),
-     and Excel copy commits (`POST /api/import/copies/:id/commit`) supply
+     and Excel import commits (`POST /api/import/commit`) supply
      per-row `{ id, version }` and report per-row `409` conflicts without
      silent overwrites.
 3. **Restore Restriction:**
