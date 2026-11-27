@@ -29,14 +29,24 @@ parsed strictly in memory and exports are filled and streamed in memory
   the fly with my role-scoped live cases from PostgreSQL (preserving template
   macros and pivot tables) without storing any data files on the server.
 
-> [!IMPORTANT]
-> **Pending Business Input — Excel Schema Not Yet Delivered:**
-> The real Excel workbook has **not yet been delivered by the business**.
-> All column names below are **provisional placeholders** only. Implementation
-> MUST isolate Excel column mapping and template schema validation behind a
-> dedicated, easily swappable adapter module and MUST NOT hardcode final column
-> names across routes, services, or frontend components until the sample
-> workbook is provided and signed off.
+> [!NOTE]
+> **Real ZUS Workbook Schema Verified (import):**
+> Column mapping and template schema validation MUST stay isolated in a
+> dedicated adapter (`services/excel_adapter.py`). The adapter recognises
+> **both** the real ZUS workbook layout (`Numer E2`, `DANE`,
+> `DATA WPŁYWU EPWD`, `termin realizacji`, `Status`, plus all extra ZUS
+> columns preserved verbatim) **and** the standard Malinois headers
+> (`Nr sprawy`, `Tytuł`, `Klient`, `Przypisany`, `Termin`, `Data złożenia`,
+> `Status`, `Uwagi`). Column names MUST NOT be hardcoded across routes,
+> services, or frontend components.
+
+> [!WARNING]
+> **Implementation Gap:**
+> The current code still implements the superseded `working_copies` design
+> (`/api/import/copies/*`, including `supervisor` upload and snapshot copies).
+> `excel_templates`, the template endpoints, `GET /api/cases/export`, and
+> `POST /api/import/preview` / `commit` as specified below are still to be
+> built. `plan.md` and `tasks.md` in this folder describe the superseded design.
 
 ## Acceptance Criteria
 
@@ -83,14 +93,29 @@ parsed strictly in memory and exports are filled and streamed in memory
   - Validates uploaded `.xlsx` / `.xlsm` / `.xls` by MIME type **and**
     extension, capped at **10 MB** (`413` if exceeded), parsed strictly in
     memory and **never stored on disk or persisted as a file**
-  - Column mapping lives in a single configurable adapter module. **Provisional
-    placeholder columns** (to be replaced once the business delivers the sample
-    workbook): `Nr sprawy / Case Number`, `Tytuł / Title`, `Klient / Client`,
-    `Przypisany / Assigned To` (email), `Termin / Deadline`,
-    `Data złożenia / Date Filed` (optional), `Uwagi / Note` (optional)
+  - Column mapping lives in `services/excel_adapter.py`, recognising both real
+    ZUS headers (`Numer E2`, `DANE`, `DATA WPŁYWU EPWD`, `termin realizacji`,
+    `Status`) and standard Malinois headers (`Nr sprawy`, `Tytuł`, `Klient`,
+    `Przypisany` (email), `Termin`, `Data złożenia`, `Status`, `Uwagi`); all
+    unmapped columns (e.g. `DATA OPRACOWANIA`, `APROBANT`, `OFE`, `Składki`,
+    `uprawnienie od`, `Pesel`, `INNE`, `data`, `inne`) are preserved verbatim
+    in `cases.extra_fields` (spec 003), deduplicating repeated headers safely;
+    `Pesel` values are never logged
+  - The admin may supply an optional `default_assigned_to` user ID (active or
+    inactive); rows without a `Przypisany` email inherit it and can be changed
+    per row in the preview before committing
+  - `DATA WPŁYWU EPWD` preserves its exact raw string in `extra_fields`,
+    extracts a leading Polish/ISO date into `date_filed` when present (e.g.
+    `14.05.2026-ERN` → `2026-05-14`), and allows pure-text entries (e.g.
+    `z urzędu - EDUK`) with `date_filed = null`; when no `Tytuł` column exists,
+    `title` is built from the suffix (or case number) + client
   - Dates accept **both** native Excel date serials (`datetime`/`date`) **and**
     Polish text formats (`DD.MM.YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`); unparseable
-    values produce a per-row validation error, never a silent `null`
+    values produce a per-row validation error, never a silent `null`. The one
+    exception is non-date free text in `termin realizacji` / `Termin`, which is
+    preserved in `extra_fields` with `deadline = null` and a visible
+    non-blocking warning badge (malformed date-like strings such as
+    `32.13.2026` still block the row)
   - Past deadlines are allowed (overdue cases are valid domain records)
   - Duplicate `case_number` rows **within the same uploaded file** are blocked
     as preview validation errors
@@ -180,7 +205,8 @@ or required headers), or template contains non-empty data rows
 
 ### `POST /api/import/preview`
 **Headers:** `Authorization: Bearer <jwt>` (admin only)  
-**Body:** `multipart/form-data`, field `file` (`.xlsx` / `.xlsm` / `.xls`, max 10 MB)  
+**Body:** `multipart/form-data`, field `file` (`.xlsx` / `.xlsm` / `.xls`, max 10 MB),
+optional field `default_assigned_to` (user ID)  
 **200 OK** — `{ rows, errors, conflicts }` parsed strictly in memory  
 **400 Bad Request** — invalid MIME/extension or unparseable workbook  
 **403 Forbidden** — not admin  
@@ -201,6 +227,7 @@ or required headers), or template contains non-empty data rows
       "deadline": "2027-03-15",
       "date_filed": "2027-01-10",
       "note": "Pilne dokumenty",
+      "extra_fields": { "APROBANT": "JK" },
       "resolution": "create"
     },
     {
@@ -251,12 +278,12 @@ New table `excel_templates`:
 
 ## Open Blockers (Business Input Required)
 
-- [ ] **Sample Excel workbook / template not yet delivered:** Finalize exact
-      sheet name(s), column headers, required vs. optional columns, unique case
-      identifier column, assignee identifier format (email vs. full name),
-      actual date cell formatting, and verify macro (`.xlsm`) + pivot table
-      (`refreshOnLoad`) behaviour with `openpyxl` once the business provides the
-      sample file.
+- [x] **Sample Excel workbook delivered & analyzed** (stored locally in
+      gitignored `impwork/`): 14-column ZUS layout mapped in
+      `services/excel_adapter.py` with full preservation of unmapped columns.
+- [ ] **Export template not yet verified:** Finalize the template's required
+      sheet name(s) and required vs. optional columns, and verify macro
+      (`.xlsm`) + pivot table (`refreshOnLoad`) behaviour with `openpyxl`.
 
 ## Architecture Decisions
 

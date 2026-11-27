@@ -31,26 +31,45 @@ the primary working table of the application and reflects each user's role
 - [ ] `GET /api/cases` returns `{ items, total, page, page_size }` filtered by
       role as described in spec 002 (excludes archived cases by default)
 - [ ] Each case object includes: `id`, `case_number`, `title`, `client_name`,
-      `assigned_to`, `deadline`, `date_filed`, `status`, `archived`, `version`,
-      `created_at`, `updated_at` (no `cases.note` column — notes live in
-      `case_notes`, spec 010)
+      `assigned_to`, `assigned_to_email`, `assigned_to_is_active`, `deadline`,
+      `date_filed`, `status`, `archived`, `version`, `extra_fields` (JSON dict
+      preserving extra ZUS Excel columns such as `APROBANT`, `OFE`, `Składki`,
+      `DATA OPRACOWANIA`, `uprawnienie od`, `Pesel`, `INNE`), `created_at`,
+      `updated_at` (no `cases.note` column — notes live in `case_notes`, spec
+      010)
+- [ ] `GET /api/cases` defaults to `page=1`, `page_size=50` (max `200`), sorted
+      by `deadline ASC` with `NULL` deadlines last (then `id ASC`)
+- [ ] `GET /api/users/assignable` returns `{ id, email, role, is_active }` for
+      assigning cases (`supervisor` sees self + direct subordinates; `admin`
+      sees all users; `user` receives `403`); inactive users are included so
+      work can still be assigned to them with an explicit `(nieaktywny)` badge
 - [ ] `GET /api/cases/:id` returns a single case; `404 Not Found` if non-existent
       or outside the caller's visibility scope
-- [ ] `POST /api/cases` creates a new case:
-  - `admin` may set `deadline` and `date_filed` (including past deadlines for
-    overdue records)
+- [ ] `POST /api/cases` creates a new case (`assigned_to` may be an active or
+      inactive existing user; `400` if user does not exist):
+  - `admin` may set `case_number`, `deadline`, and `date_filed` (including past
+    deadlines for overdue records)
   - `supervisor` may create a case for themselves or a direct subordinate, but
     MUST omit or pass `null` for `deadline` and `date_filed` (`403 Forbidden`
     if non-null dates are supplied); an admin populates dates afterward
   - `user` receives `403 Forbidden`
 - [ ] `PATCH /api/cases/:id` requires `version` (spec 011), updates editable
-      fields, increments `version`, and logs field-level changes (spec 009):
-  - `user` and `supervisor` may edit `title`, `client_name`, `status` on
-    in-scope cases
-  - `admin` may edit all fields including `deadline` and `date_filed`; any
-    change to `deadline` or `date_filed` requires a non-empty `reason` string
-    (max 500 chars), recorded in `case_edit_log` (spec 009); returns `400` if
-    `reason` is missing or blank
+      fields, increments `version`, and logs field-level changes via the audit
+      hook (spec 009; never logging sensitive `Pesel` values):
+  - Archived cases (`archived = true`) return `400 Bad Request` (read-only until
+    restored)
+  - `user` and `supervisor` may edit `title`, `client_name`, `status`, and
+    `extra_fields` on in-scope cases; attempting to modify `deadline`,
+    `date_filed`, `case_number`, or `assigned_to` returns `403 Forbidden`
+  - `admin` may edit all fields including `case_number`, `assigned_to`,
+    `deadline`, and `date_filed`; any actual change to `deadline` or
+    `date_filed` (including setting or clearing to `null`) requires a non-empty
+    `reason` string (max 500 chars), recorded in `case_edit_log` (spec 009);
+    returns `400` if `reason` is missing or blank
+- [ ] Wires Spec 002's `get_blocking_case_ids` deactivation hook in
+      `services/users.py` so deactivating a user with active (`archived = false`)
+      cases enforces `reassign_cases_to` (`409 Conflict` if omitted) and
+      atomically reassigns those cases (incrementing `cases.version`)
 - [ ] `DELETE /api/cases/:id` is not exposed — cases are archived, not deleted
       (see spec 006-archive)
 - [ ] All timestamps are stored and returned as ISO 8601 UTC; date comparisons
@@ -193,6 +212,7 @@ New table `cases`:
 | `status` | String(20) | Default `"open"`, values: `open \| closed` |
 | `archived` | Boolean | Default `False`, indexed |
 | `version` | Integer | Not null, `server_default="1"` |
+| `extra_fields` | JSON | Nullable (extra ZUS Excel columns; `Pesel` never logged) |
 | `created_at` | DateTime | Default UTC now, not null |
 | `updated_at` | DateTime | Auto-updated on change |
 

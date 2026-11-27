@@ -1,7 +1,23 @@
+export type UserRole = "admin" | "supervisor" | "user";
+export type UITheme = "dark" | "light";
+export type UIFontSize = "small" | "normal" | "large" | "xl";
+
+export interface UISettings {
+  theme: UITheme;
+  font_size: UIFontSize;
+  high_contrast: boolean | null;
+  reduced_motion: boolean | null;
+}
+
 export interface User {
   id: number;
   email: string;
   is_active: boolean;
+  role: UserRole;
+  supervisor_id: number | null;
+  must_change_password: boolean;
+  ui_settings?: UISettings;
+  notification_threshold_days?: number;
 }
 
 export interface LoginResponse {
@@ -21,6 +37,15 @@ export class ApiError extends Error {
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+async function parseErrorDetail(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await response.json()) as { detail?: string };
+    return data.detail || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function loginRequest(email: string, password: string): Promise<LoginResponse> {
   const response = await fetch(`${API_URL}/api/login`, {
     method: "POST",
@@ -31,16 +56,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
   });
 
   if (!response.ok) {
-    let message = "Błąd logowania";
-    try {
-      const data = (await response.json()) as { detail?: string };
-      if (data.detail) {
-        message = data.detail;
-      }
-    } catch {
-      message = "Błąd logowania";
-    }
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, await parseErrorDetail(response, "Błąd logowania"));
   }
 
   return (await response.json()) as LoginResponse;
@@ -59,4 +75,52 @@ export async function fetchMeRequest(token: string): Promise<User> {
   }
 
   return (await response.json()) as User;
+}
+
+export async function changePasswordRequest(
+  token: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const response = await fetch(`${API_URL}/api/me/password`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      await parseErrorDetail(response, "Nie udało się zmienić hasła.")
+    );
+  }
+}
+
+export async function updateMySettingsRequest(
+  token: string,
+  patch: Partial<UISettings>
+): Promise<UISettings> {
+  const response = await fetch(`${API_URL}/api/me/settings`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(patch),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      await parseErrorDetail(response, "Nie udało się zapisać ustawień.")
+    );
+  }
+
+  return (await response.json()) as UISettings;
 }

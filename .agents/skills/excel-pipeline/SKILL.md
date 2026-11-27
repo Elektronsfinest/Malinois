@@ -50,16 +50,13 @@ populate an admin-managed **empty** template in memory and stream it directly.
      streams via `StreamingResponse`.
    - Falls back to generating a clean in-memory `.xlsx` if no custom template
      has been uploaded yet.
-4. **Pending Business Schema — Swappable Adapter:**
-   - **Important:** The real Excel workbook / template has **not yet been
-     delivered by the business**. Keep all sheet names, header matching, and
-     schema validation inside a single configurable adapter module — never
-     hardcode provisional column names across routes, services, or frontend
-     components.
-   - Provisional placeholder columns: `Nr sprawy / Case Number`,
-     `Tytuł / Title`, `Klient / Client`, `Przypisany / Assigned To`,
-     `Termin / Deadline`, `Data złożenia / Date Filed` (optional),
-     `Uwagi / Note` (optional).
+4. **Workbook Schema — Swappable Adapter:**
+   - Keep all sheet names, header matching, and schema validation inside a
+     single configurable adapter module (`services/excel_adapter.py`) — never
+     hardcode column names across routes, services, or frontend components.
+   - The sample ZUS workbook is mapped for import; see `spec 004` for ZUS and
+     Malinois headers and parsing rules. The export template's sheet names and
+     macro / pivot behaviour are **not yet verified**.
 
 ---
 
@@ -69,7 +66,8 @@ populate an admin-managed **empty** template in memory and stream it directly.
    - Accept native Excel date cells (`datetime`/`date` objects from `openpyxl`)
      AND Polish text formats: `DD.MM.YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`.
    - Unparseable dates produce a per-row validation error — never silently
-     coerced to `null`.
+     coerced to `null`. Exception: non-date free text in the deadline column is
+     preserved in `extra_fields` with a visible warning (`spec 004`).
    - Past deadlines are valid (overdue cases are allowed on import).
 2. **Duplicate & Conflict Handling:**
    - Duplicate `case_number` rows **within the same uploaded file** are blocked

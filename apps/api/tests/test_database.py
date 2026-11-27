@@ -51,6 +51,25 @@ class TestUserModelAndSchema:
         )
         assert has_true_default, "Kolumna 'is_active' musi mieć wartość domyślną True"
 
+        assert "role" in columns, "Tabela 'users' musi posiadać kolumnę 'role'"
+        assert columns["role"].nullable is False
+        assert columns["role"].server_default is not None
+
+        assert "supervisor_id" in columns, (
+            "Tabela 'users' musi posiadać kolumnę 'supervisor_id'"
+        )
+        assert columns["supervisor_id"].nullable is True
+        assert columns["supervisor_id"].index is True or any(
+            "supervisor_id" in [c.name for c in idx.columns]
+            for idx in User.__table__.indexes
+        ), "Kolumna 'supervisor_id' musi być indeksowana"
+
+        assert "must_change_password" in columns, (
+            "Tabela 'users' musi posiadać kolumnę 'must_change_password'"
+        )
+        assert columns["must_change_password"].nullable is False
+        assert columns["must_change_password"].server_default is not None
+
 
 class TestDatabaseSessionManagement:
     def test_get_db_is_generator_and_closes_session(self):

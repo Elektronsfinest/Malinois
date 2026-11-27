@@ -28,7 +28,7 @@
 | [001](001-auth/spec.md) | `auth` | ✅ Done | — | `/login`, `POST /api/login`, `GET /api/me`, `GET /health` |
 | [002](002-roles-and-permissions/spec.md) | `roles-and-permissions` | 📋 Spec (Resolved) | 001 | `GET/POST /api/admin/users`, `PATCH /api/admin/users/:id` |
 | [003](003-case-management/spec.md) | `case-management` | 📋 Spec (Resolved) | 002 | `/cases`, `GET/POST /api/cases`, `GET/PATCH /api/cases/:id` |
-| [004](004-excel-import/spec.md) | `excel-import` | 📋 Spec (Resolved — pending business Excel sample) | 003, 007, 009, 010, 011, 017 | `/import`, `/api/import/*`, `/api/cases/export`, `/api/admin/excel-template` |
+| [004](004-excel-import/spec.md) | `excel-import` | 📋 Spec (Resolved — export template unverified) | 003, 007, 009, 010, 011, 017 | `/import`, `/api/import/*`, `/api/cases/export`, `/api/admin/excel-template` |
 | [005](005-notifications/spec.md) | `notifications` | 📋 Spec (Resolved) | 003, 012 | `GET /api/notifications`, `POST /api/notifications/:case_id/dismiss` |
 | [006](006-archive/spec.md) | `archive` | 📋 Spec (Resolved) | 003, 005, 009, 011, 016 | `/archive`, `POST /api/cases/:id/archive`, `POST /api/cases/:id/restore` |
 | [007](007-security/spec.md) | `security` | 📋 Spec (Resolved) | 001, 002 | Cross-cutting; `POST /api/admin/users/:id/reset-password` |

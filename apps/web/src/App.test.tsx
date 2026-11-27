@@ -151,4 +151,66 @@ describe('Autoryzacja i Dashboard (TDD)', () => {
       expect(window.sessionStorage.getItem('access_token')).toBeNull()
     })
   })
+
+  describe('RBAC — role badge i strażnik trasy /admin', () => {
+    it('użytkownik admin widzi odznakę Administrator i link do Panelu administratora', async () => {
+      const user = userEvent.setup()
+      window.localStorage.setItem('access_token', 'admin-jwt')
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 2,
+            email: 'admin@example.com',
+            is_active: true,
+            role: 'admin',
+            supervisor_id: null,
+            must_change_password: false,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+
+      window.history.pushState({}, '', '/')
+      render(<App />)
+
+      expect(await screen.findByText('Administrator')).toBeInTheDocument()
+      const adminLink = screen.getByRole('link', {
+        name: /Panel administratora/i,
+      })
+      expect(adminLink).toBeInTheDocument()
+
+      await user.click(adminLink)
+      expect(
+        await screen.findByRole('heading', { name: /Panel administratora/i })
+      ).toBeInTheDocument()
+    })
+
+    it('użytkownik bez roli admin nie widzi linku /admin i jest przekierowywany z /admin na /', async () => {
+      window.localStorage.setItem('access_token', 'supervisor-jwt')
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 3,
+            email: 'supervisor@example.com',
+            is_active: true,
+            role: 'supervisor',
+            supervisor_id: null,
+            must_change_password: false,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+
+      window.history.pushState({}, '', '/admin')
+      render(<App />)
+
+      expect(
+        await screen.findByText(/Witaj,\s*supervisor@example\.com!/i)
+      ).toBeInTheDocument()
+      expect(screen.getByText('Nadrzędny')).toBeInTheDocument()
+      expect(
+        screen.queryByRole('link', { name: /Panel administratora/i })
+      ).not.toBeInTheDocument()
+    })
+  })
 })

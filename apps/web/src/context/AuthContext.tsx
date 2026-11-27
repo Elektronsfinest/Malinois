@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ApiError, fetchMeRequest, loginRequest, type LoginResponse, type User } from "../api/auth";
-import { AuthContext } from "./useAuth";
+import {
+  ApiError,
+  fetchMeRequest,
+  loginRequest,
+  type LoginResponse,
+  type User,
+} from "../api/auth";
+import { clearAllSessionDrafts, clearDraftsIfDifferentUser } from "../utils/draftStorage";
+import { applyUiSettingsToDocument, AuthContext } from "./useAuth";
 
 const TOKEN_STORAGE_KEY = "access_token";
 
@@ -10,6 +17,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
 
   const isLoading = Boolean(token && !user && !authError);
+
+  useEffect(() => {
+    applyUiSettingsToDocument(user?.ui_settings);
+  }, [user?.ui_settings]);
 
   useEffect(() => {
     if (!token || user) {
@@ -49,18 +60,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const commitLogin = useCallback((result: LoginResponse) => {
+    clearDraftsIfDifferentUser(result.user.email);
     localStorage.setItem(TOKEN_STORAGE_KEY, result.access_token);
     setAuthError(null);
     setToken(result.access_token);
     setUser(result.user);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await loginRequest(email, password);
-    commitLogin(result);
-  }, [commitLogin]);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const result = await loginRequest(email, password);
+      commitLogin(result);
+    },
+    [commitLogin]
+  );
+
+  const refreshUser = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+    const me = await fetchMeRequest(token);
+    setUser(me);
+  }, [token]);
+
+  const updateUserLocal = useCallback((updater: (current: User) => User) => {
+    setUser((prev) => (prev ? updater(prev) : prev));
+  }, []);
 
   const logout = useCallback(() => {
+    clearAllSessionDrafts();
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     setToken(null);
     setUser(null);
@@ -68,7 +96,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, authError, login, authenticate, commitLogin, logout }}>
+    <AuthContext.Provider
+      value={{
+        token,
+        user,
+        isLoading,
+        authError,
+        login,
+        authenticate,
+        commitLogin,
+        refreshUser,
+        updateUserLocal,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
