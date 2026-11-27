@@ -31,11 +31,22 @@ management. This is the prerequisite for all case-management features.
 - [ ] The `users` table has a `role` column with values `admin`, `supervisor`,
       `user`; default is `user`
 - [ ] The `users` table has a nullable `supervisor_id` FK to `users.id` for
-      regular users assigned to a direct supervisor (one-level hierarchy only;
-      no transitive nesting)
+      regular users (`role = "user"`) assigned to a direct active `supervisor`
+      or `admin` (one-level hierarchy only; `supervisor` and `admin` always have
+      `supervisor_id = null`; self-supervision returns `400 Bad Request`)
+- [ ] The `users` table has a `must_change_password` boolean column (default
+      `false`); `POST /api/login` and `GET /api/me` return `{ id, email,
+      is_active, role, supervisor_id, must_change_password }`
 - [ ] The JWT payload remains `sub`-only (user email, as in `security.py`);
       `role`, `is_active`, and `must_change_password` are loaded from the
-      database on every authenticated request via `get_current_user`
+      database on every authenticated request via `get_authenticated_user`
+      (`GET /api/me`, `PATCH /api/me/password`) and `get_current_user` (all
+      other routes — returns `403` with `code: "password_change_required"` when
+      `must_change_password = true`)
+- [ ] `security.py` pins `bcrypt.gensalt(rounds=12)`, rejects the default dev
+      `JWT_SECRET_KEY` when `ENV=production`, and validates the 12-char strong
+      password policy (min 12 chars, max 72 UTF-8 bytes, ≥1 upper, ≥1 lower, ≥1
+      digit, ≥1 non-alphanumeric non-whitespace special character)
 - [ ] Reusable `require_role(*roles)` dependency guards role-restricted routes
       and returns `403 Forbidden` for unauthorized roles
 - [ ] Visibility scope for `GET /api/cases` and single-case endpoints:
@@ -55,16 +66,24 @@ management. This is the prerequisite for all case-management features.
 - [ ] `assigned_to` changes only via `admin` or team-scoped reassignment
       (`POST /api/cases/reassign`, spec 016)
 - [ ] `GET /api/admin/users` is accessible only to `admin`; returns `403`
-      otherwise
+      otherwise; returns a flat JSON array including active and inactive users
+      with optional `?role=`, `?supervisor_id=`, and `?is_active=` filters
 - [ ] `POST /api/admin/users` creates a new user (admin only), enforces the
-      12-character strong password policy (spec 007), and sets
-      `must_change_password = true`; returns `403` for non-admins
+      12-character strong password policy (max 72 UTF-8 bytes, spec 007), and
+      sets `must_change_password = true`; returns `403` for non-admins
 - [ ] `PATCH /api/admin/users/:id` updates `role`, `supervisor_id`, `is_active`
-      (admin only) and logs permission changes to the audit log (spec 009).
-      Deactivating a user with active cases requires `reassign_cases_to`, and
-      deactivating a supervisor with direct subordinates requires
-      `reassign_subordinates_to` (pointing to an active `supervisor` or
-      `admin`); omitting either returns `409 Conflict` listing blocking IDs
+      (admin only) and logs permission changes via the audit log hook (spec 009):
+  - Rejects with `400 Bad Request` if an admin tries to deactivate or demote
+    themselves, or if the change would leave zero active admins
+  - Promoting `user` → `supervisor`/`admin` automatically clears `supervisor_id = null`
+  - Switching `supervisor` ↔ `admin` preserves existing direct subordinates
+  - Demoting `supervisor`/`admin` → `user` while direct subordinates exist
+    requires `reassign_subordinates_to` (active `supervisor` or `admin`),
+    otherwise returns `409 Conflict` with `blocking_subordinate_ids`
+  - Deactivating a user with active cases requires `reassign_cases_to` (hook
+    wired in spec 003), and deactivating a `supervisor` or `admin` with direct
+    subordinates requires `reassign_subordinates_to` (active `supervisor` or
+    `admin`); omitting either returns `409 Conflict` listing blocking IDs
 
 ### Frontend
 - [ ] The Main page (`/cases`) only shows rows the current user is authorised
@@ -190,6 +209,7 @@ management. This is the prerequisite for all case-management features.
 Add to `users` table:
 - `role` — `String(20)`, not null, `server_default="user"`, values: `admin | supervisor | user`
 - `supervisor_id` — `Integer`, nullable, FK → `users.id` (self-referential), indexed
+- `must_change_password` — `Boolean`, not null, `server_default=false`
 
 ## Resolved Decisions (Indaba Council)
 

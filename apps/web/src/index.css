@@ -25,10 +25,97 @@ body {
               linear-gradient(135deg, #020b1f 0%, #001845 50%, #042562 100%);
   background-attachment: fixed;
   color: #ffffff;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 #root {
   display: flex;
   flex-direction: column;
+}
+
+/* Spec 008 Accessibility & Theme Preferences */
+html[data-font-size="small"] {
+  font-size: 90%;
+}
+
+html[data-font-size="normal"] {
+  font-size: 100%;
+}
+
+html[data-font-size="large"] {
+  font-size: 112.5%;
+}
+
+html[data-font-size="xl"] {
+  font-size: 125%;
+}
+
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-reduced-motion="false"]) *,
+  html:not([data-reduced-motion="false"]) *::before,
+  html:not([data-reduced-motion="false"]) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html[data-high-contrast="true"] body,
+html[data-high-contrast="true"] .app-shell,
+html[data-high-contrast="true"] .dashboard-container {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+html[data-high-contrast="true"] .cases-table-card,
+html[data-high-contrast="true"] .case-editor-panel,
+html[data-high-contrast="true"] .modal-card,
+html[data-high-contrast="true"] .app-nav {
+  background: #000000 !important;
+  border: 2px solid #facc15 !important;
+}
+
+html[data-theme="light"] body,
+html[data-theme="light"] .app-shell,
+html[data-theme="light"] .dashboard-container {
+  background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 50%, #e2e8f0 100%) !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .app-nav,
+html[data-theme="light"] .cases-table-card,
+html[data-theme="light"] .case-editor-panel,
+html[data-theme="light"] .dashboard-card,
+html[data-theme="light"] .modal-card {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(15, 23, 42, 0.16) !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .app-nav-brand,
+html[data-theme="light"] .nav-link,
+html[data-theme="light"] .cases-subtitle,
+html[data-theme="light"] .dashboard-greeting,
+html[data-theme="light"] .cases-table th,
+html[data-theme="light"] .form-field label,
+html[data-theme="light"] .app-nav-email {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .form-field input,
+html[data-theme="light"] .form-field select,
+html[data-theme="light"] .note-textarea,
+html[data-theme="light"] .grid-input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.25) !important;
 }

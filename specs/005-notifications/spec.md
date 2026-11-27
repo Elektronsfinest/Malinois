@@ -28,7 +28,8 @@ restored from archive.
 ### Backend
 - [ ] `GET /api/notifications` returns all active (non-dismissed) notifications
       for the requesting user, filtered by their role (spec 002: `user` = own;
-      `supervisor` = own + direct subordinates; `admin` = all)
+      `supervisor` = own + direct subordinates; `admin` = all), sorted by
+      `deadline ASC, case_id ASC`, and including `assigned_to_email`
 - [ ] A notification is derived at query time for every case where:
   - `deadline IS NOT NULL`
   - `deadline - today_warsaw <= notification_threshold_days` (where
@@ -50,24 +51,38 @@ restored from archive.
   - Restoring a case from archive (spec 006) deletes prior dismissals for that
     case so notifications reactivate if the deadline is still within threshold
 - [ ] `POST /api/notifications/:case_id/dismiss` returns `404 Not Found` if the
-      case does not exist or is outside the caller's visibility scope (spec 007)
+      case does not exist or is outside the caller's visibility scope (spec 007),
+      returns `400 Bad Request` if the case has no active notification, and is
+      idempotent (`204 No Content`) if already dismissed for the current
+      `(deadline, urgency)`
 
 ### Frontend
 - [ ] On login and on each page load (plus 60-second polling), the client
-      fetches `GET /api/notifications`
-- [ ] Active notifications appear as accessible in-app popup windows (`role="alertdialog"`)
-      and are also listed in the navigation bar notification bell panel
-- [ ] Each popup shows: case title, client name, deadline (Polish format
-      `DD.MM.YYYY`), days remaining (or `"Termin dzisiaj"` / `"ZALEGŁE"`)
-- [ ] Each popup has a **"Zamknij"** button (dismiss for this user) and a
-      **"Zakończ sprawę"** button (marks `status = "closed"` with `version`)
+      fetches `GET /api/notifications`; polling updates the bell badge live and
+      only re-opens the popup if a new notification appears or escalates to
+      `overdue`
+- [ ] Active notifications appear in a single scrollable accessible in-app popup
+      modal (`role="alertdialog"`) with a **"Ukryj na teraz"** button, and are
+      also listed in the navigation bar notification bell panel
+- [ ] Native **Windows / OS desktop notifications** via the Web Notifications
+      API (`window.Notification`):
+  - Provides a **"Włącz powiadomienia Windows"** trigger when permission is
+    `"default"` (user-gesture compliant)
+  - Fires a grouped native Windows toast notification when permission is
+    `"granted"` and active/new urgent notifications are detected; clicking it
+    focuses the browser window; degrades gracefully if unsupported or denied
+- [ ] Each notification item shows: case title, client name, assignee email
+      (for supervisor/admin), deadline (Polish format `DD.MM.YYYY`), days
+      remaining (or `"Termin dzisiaj"` / `"ZALEGŁE"`)
+- [ ] Each notification item has a **"Zamknij"** button (dismiss for this user)
+      and a **"Zakończ sprawę"** button (marks `status = "closed"` with
+      `version`)
 - [ ] A notification bell badge in the navigation bar shows the count of active
       notifications; disappears when count is `0`
 - [ ] Closed or archived cases generate no notifications
 
 ## Out of Scope
 
-- Browser/OS push notifications
 - Email or SMS notifications
 - Notification sound toggles (excluded per spec 008)
 - Notifications for routine case edits (only deadline upcoming/overdue)

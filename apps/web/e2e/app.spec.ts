@@ -37,6 +37,15 @@ test.describe('Flow Autoryzacji E2E (TDD)', () => {
       page.getByText('Witaj, trainee@example.com!')
     ).toBeVisible()
 
+    // Spec 005 deadline notification modal may appear on login; dismiss if visible
+    const hidePopupBtn = page.getByRole('button', { name: 'Ukryj na teraz' })
+    try {
+      await hidePopupBtn.waitFor({ state: 'visible', timeout: 2000 })
+      await hidePopupBtn.click()
+    } catch {
+      // No urgent notifications popup
+    }
+
     await page.getByRole('button', { name: /wyloguj/i }).click()
 
     await expect(page).toHaveURL(/\/login$/)

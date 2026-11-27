@@ -73,10 +73,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # ── Project-specific ──────────────────────────────────────────────────────────
-# SQLite dev database
+# SQLite dev database & local backups
 *.db
 *.sqlite
 *.sqlite3
+apps/api/backups/
 
 # Playwright output
 apps/web/playwright-report/
@@ -106,3 +107,6 @@ apps/web/dist/
 *.log
 .indaba/logs/
 .indaba/traces/
+
+# ── Confidential local work files (NEVER commit) ──────────────────────────────
+impwork/

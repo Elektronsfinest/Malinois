@@ -37,12 +37,13 @@ Excel import & full copy editing live separately at `/import` (reached from
       `supervisor_id`, `is_active`, plus optional `reassign_cases_to` and
       `reassign_subordinates_to`:
   - Returns `400` if `supervisor_id` points to a non-existent, inactive, or
-    non-supervisor user
+    non-`supervisor`/non-`admin` user (or if `supervisor_id == id`)
   - When setting `is_active = false`: if the user owns active (non-archived)
     cases and `reassign_cases_to` (an active user) is omitted, OR if the user
-    is a supervisor with direct subordinates and `reassign_subordinates_to` (an
-    active `supervisor` or `admin`) is omitted, returns **`409 Conflict`** with
-    `blocking_case_ids` and `blocking_subordinate_ids` (no silent fallback)
+    is a `supervisor` or `admin` with direct subordinates and
+    `reassign_subordinates_to` (an active `supervisor` or `admin`) is omitted,
+    returns **`409 Conflict`** with `blocking_case_ids` and
+    `blocking_subordinate_ids` (no silent fallback)
   - Executes reassignment + deactivation atomically in one transaction and logs
     all permission changes in `admin_audit_log` (spec 009)
 - [ ] `POST /api/admin/users/:id/reset-password` returns a one-time 12-char

@@ -1,7 +1,7 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 import models
 from database import Base, DATABASE_URL
@@ -37,14 +37,23 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            render_as_batch=True,
-        )
+        is_sqlite = connection.dialect.name == "sqlite"
+        if is_sqlite:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
+        try:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                render_as_batch=True,
+            )
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+        finally:
+            if is_sqlite:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                connection.commit()
 
 
 if context.is_offline_mode():

@@ -25,14 +25,14 @@ disk** (preserving spec 007).
 - As an admin, I want an automatic database backup snapshot created before every
   import commit so that I can always recover if an import goes wrong.
 
-> [!IMPORTANT]
-> **Pending Business Input — Excel Schema Not Yet Delivered:**
-> The real Excel workbook has **not yet been delivered by the business**.
-> All column names below are **provisional placeholders** only. Implementation
-> MUST isolate Excel column mapping behind a dedicated, easily swappable
-> mapping/adapter layer (with `extra_columns` JSON passthrough) and MUST NOT
-> hardcode final column names into the core `working_copies` engine until
-> the sample workbook is provided and signed off.
+> [!NOTE]
+> **Real ZUS Workbook Schema Verified:**
+> Column mapping is isolated in a dedicated adapter (`services/excel_adapter.py`)
+> supporting **both** the real ZUS workbook layout (`Numer E2`, `DANE`,
+> `DATA WPŁYWU EPWD`, `termin realizacji`, `Status`, plus all extra ZUS columns
+> preserved verbatim in `extra_columns`) **and** the standard Malinois round-trip
+> export format (`Nr sprawy`, `Tytuł`, `Klient`, `Przypisany`, `Termin`,
+> `Data złożenia`, `Status`, `Uwagi`).
 
 ## Acceptance Criteria
 
@@ -48,24 +48,35 @@ disk** (preserving spec 007).
     the `.xlsx` binary in memory and streams it with
     `Content-Disposition: attachment`
 - [ ] **Creating a working copy:**
-  - `POST /api/import/copies/upload` (`admin` only; `403` for others) parses an
-    uploaded `.xlsx`/`.xls` into a `working_copies` row
+  - `POST /api/import/copies/upload` (`admin` and `supervisor`; `403` for
+    `user`) parses an uploaded `.xlsx`/`.xls` into a `working_copies` row
+    (supervisors can only assign imported rows to themselves or direct
+    subordinates and cannot manually edit date cells)
   - `POST /api/import/copies/from-cases` (all authenticated roles) snapshots
     the caller's visible live cases (filtered by spec 002 role rules) into a
     working copy for inspection, editing, or `.xlsx` download
-- [ ] **Parsing & validation rules (schema-agnostic adapter until business sample arrives):**
-  - Column mapping lives in a single configurable adapter module (not scattered
-    across routes or DB models). **Provisional placeholder columns** (to be
-    replaced once the business delivers the sample workbook):
-    `Nr sprawy / Case Number`, `Tytuł / Title`, `Klient / Client`,
-    `Przypisany / Assigned To` (email), `Termin / Deadline`,
-    `Data złożenia / Date Filed` (optional), `Uwagi / Note` (optional); all
-    other/unmapped columns in the spreadsheet are preserved verbatim in
-    `extra_columns` JSON on each copy row so the full sheet can be edited and
-    re-downloaded intact regardless of final column layout
-  - Dates accept **both** native Excel date serials (`datetime`/`date`) **and**
-    Polish text formats (`DD.MM.YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`); unparseable
-    values produce a per-row validation error, never a silent `null`
+- [ ] **Parsing & validation rules (dual ZUS + Malinois adapter):**
+  - Column mapping lives in `services/excel_adapter.py`, recognizing both real
+    ZUS headers (`Numer E2`, `DANE`, `DATA WPŁYWU EPWD`, `termin realizacji`,
+    `Status`) and standard Malinois headers (`Nr sprawy`, `Tytuł`, `Klient`,
+    `Przypisany`, `Termin`, `Data złożenia`, `Status`, `Uwagi`); all unmapped
+    columns (e.g. `DATA OPRACOWANIA`, `APROBANT`, `OFE`, `Składki`,
+    `uprawnienie od`, `Pesel`, `INNE`, `data`, `inne`) are preserved verbatim
+    in `extra_columns` JSON (deduplicating repeated headers safely)
+  - On upload (`POST /api/import/copies/upload`), the admin supplies an optional
+    `default_assigned_to` user ID (active or inactive); rows without a
+    `Przypisany` email column inherit `default_assigned_to` and can be changed
+    per row in the copy grid before committing
+  - `DATA WPŁYWU EPWD` preserves its exact raw string in `extra_columns`,
+    extracts a leading Polish/ISO date into `date_filed` when present (e.g.
+    `14.05.2026-ERN` → `2026-05-14`), auto-builds `title` from suffix + client
+    when no `Tytuł` column exists, and allows pure-text entries (e.g.
+    `z urzędu - EDUK`) with `date_filed = null`
+  - `termin realizacji` / `Termin` accepts native Excel date serials and Polish
+    text formats (`DD.MM.YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`); non-date free-text
+    notes are preserved in `extra_columns` with `deadline = null` and a
+    non-blocking warning badge, while malformed date-like strings (e.g.
+    `32.13.2026`) raise a blocking per-row validation error
   - Past deadlines are allowed (overdue cases are valid domain records)
   - Duplicate `case_number` rows **within the same uploaded file** are blocked
     as preview validation errors
@@ -178,10 +189,9 @@ New table `working_copies`:
 
 ## Open Blockers (Business Input Required)
 
-- [ ] **Sample Excel workbook not yet delivered:** Finalize exact sheet
-      name(s), column headers, required vs. optional columns, unique case
-      identifier column, assignee identifier format (email vs. full name), and
-      actual date cell formatting once the business provides a sample file.
+- [x] **Sample Excel workbook delivered & analyzed** (stored locally in
+      gitignored `impwork/`): 14-column ZUS layout mapped in
+      `services/excel_adapter.py` with full `extra_columns` preservation.
 
 ## Resolved Decisions (Indaba Council)
 
